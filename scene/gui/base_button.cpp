@@ -33,14 +33,13 @@
 #include "core/config/project_settings.h"
 #include "core/os/keyboard.h"
 #include "scene/main/window.h"
-#include "scene/scene_string_names.h"
 
 void BaseButton::_unpress_group() {
 	if (!button_group.is_valid()) {
 		return;
 	}
 
-	if (toggle_mode) {
+	if (toggle_mode && !button_group->is_allow_unpress()) {
 		status.pressed = true;
 	}
 
@@ -135,7 +134,7 @@ void BaseButton::_notification(int p_what) {
 void BaseButton::_pressed() {
 	GDVIRTUAL_CALL(_pressed);
 	pressed();
-	emit_signal(SNAME("pressed"));
+	emit_signal(SceneStringName(pressed));
 }
 
 void BaseButton::_toggled(bool p_pressed) {
@@ -162,7 +161,7 @@ void BaseButton::on_action_event(Ref<InputEvent> p_event) {
 				status.pressed = !status.pressed;
 				_unpress_group();
 				if (button_group.is_valid()) {
-					button_group->emit_signal(SNAME("pressed"), this);
+					button_group->emit_signal(SceneStringName(pressed), this);
 				}
 				_toggled(status.pressed);
 				_pressed();
@@ -226,7 +225,7 @@ void BaseButton::set_pressed(bool p_pressed) {
 	if (p_pressed) {
 		_unpress_group();
 		if (button_group.is_valid()) {
-			button_group->emit_signal(SNAME("pressed"), this);
+			button_group->emit_signal(SceneStringName(pressed), this);
 		}
 	}
 	_toggled(status.pressed);
@@ -366,11 +365,9 @@ void BaseButton::shortcut_input(const Ref<InputEvent> &p_event) {
 		if (toggle_mode) {
 			status.pressed = !status.pressed;
 
-			if (status.pressed) {
-				_unpress_group();
-				if (button_group.is_valid()) {
-					button_group->emit_signal(SNAME("pressed"), this);
-				}
+			_unpress_group();
+			if (button_group.is_valid()) {
+				button_group->emit_signal(SceneStringName(pressed), this);
 			}
 
 			_toggled(status.pressed);
@@ -382,9 +379,10 @@ void BaseButton::shortcut_input(const Ref<InputEvent> &p_event) {
 		queue_redraw();
 		accept_event();
 
-		if (shortcut_feedback) {
+		if (shortcut_feedback && is_inside_tree()) {
 			if (shortcut_feedback_timer == nullptr) {
 				shortcut_feedback_timer = memnew(Timer);
+				shortcut_feedback_timer->set_one_shot(true);
 				add_child(shortcut_feedback_timer);
 				shortcut_feedback_timer->set_wait_time(GLOBAL_GET("gui/timers/button_shortcut_feedback_highlight_time"));
 				shortcut_feedback_timer->connect("timeout", callable_mp(this, &BaseButton::_shortcut_feedback_timeout));
@@ -469,23 +467,25 @@ void BaseButton::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_button_group"), &BaseButton::get_button_group);
 
 	GDVIRTUAL_BIND(_pressed);
-	GDVIRTUAL_BIND(_toggled, "button_pressed");
+	GDVIRTUAL_BIND(_toggled, "toggled_on");
 
 	ADD_SIGNAL(MethodInfo("pressed"));
 	ADD_SIGNAL(MethodInfo("button_up"));
 	ADD_SIGNAL(MethodInfo("button_down"));
-	ADD_SIGNAL(MethodInfo("toggled", PropertyInfo(Variant::BOOL, "button_pressed")));
+	ADD_SIGNAL(MethodInfo("toggled", PropertyInfo(Variant::BOOL, "toggled_on")));
 
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "disabled"), "set_disabled", "is_disabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "toggle_mode"), "set_toggle_mode", "is_toggle_mode");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shortcut_in_tooltip"), "set_shortcut_in_tooltip", "is_shortcut_in_tooltip_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "button_pressed"), "set_pressed", "is_pressed");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "action_mode", PROPERTY_HINT_ENUM, "Button Press,Button Release"), "set_action_mode", "get_action_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "button_mask", PROPERTY_HINT_FLAGS, "Mouse Left, Mouse Right, Mouse Middle"), "set_button_mask", "get_button_mask");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "keep_pressed_outside"), "set_keep_pressed_outside", "is_keep_pressed_outside");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "button_group", PROPERTY_HINT_RESOURCE_TYPE, "ButtonGroup"), "set_button_group", "get_button_group");
+
+	ADD_GROUP("Shortcut", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "shortcut", PROPERTY_HINT_RESOURCE_TYPE, "Shortcut"), "set_shortcut", "get_shortcut");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shortcut_feedback"), "set_shortcut_feedback", "is_shortcut_feedback");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "button_group", PROPERTY_HINT_RESOURCE_TYPE, "ButtonGroup"), "set_button_group", "get_button_group");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "shortcut_in_tooltip"), "set_shortcut_in_tooltip", "is_shortcut_in_tooltip_enabled");
 
 	BIND_ENUM_CONSTANT(DRAW_NORMAL);
 	BIND_ENUM_CONSTANT(DRAW_PRESSED);
@@ -534,9 +534,20 @@ BaseButton *ButtonGroup::get_pressed_button() {
 	return nullptr;
 }
 
+void ButtonGroup::set_allow_unpress(bool p_enabled) {
+	allow_unpress = p_enabled;
+}
+bool ButtonGroup::is_allow_unpress() {
+	return allow_unpress;
+}
+
 void ButtonGroup::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_pressed_button"), &ButtonGroup::get_pressed_button);
 	ClassDB::bind_method(D_METHOD("get_buttons"), &ButtonGroup::_get_buttons);
+	ClassDB::bind_method(D_METHOD("set_allow_unpress", "enabled"), &ButtonGroup::set_allow_unpress);
+	ClassDB::bind_method(D_METHOD("is_allow_unpress"), &ButtonGroup::is_allow_unpress);
+
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "allow_unpress"), "set_allow_unpress", "is_allow_unpress");
 
 	ADD_SIGNAL(MethodInfo("pressed", PropertyInfo(Variant::OBJECT, "button", PROPERTY_HINT_RESOURCE_TYPE, "BaseButton")));
 }

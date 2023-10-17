@@ -77,9 +77,11 @@ public:
 	virtual AABB light_get_aabb(RID p_light) const override { return AABB(); }
 	virtual float light_get_param(RID p_light, RS::LightParam p_param) override { return 0.0; }
 	virtual Color light_get_color(RID p_light) override { return Color(); }
+	virtual bool light_get_reverse_cull_face_mode(RID p_light) const override { return false; }
 	virtual RS::LightBakeMode light_get_bake_mode(RID p_light) override { return RS::LIGHT_BAKE_DISABLED; }
 	virtual uint32_t light_get_max_sdfgi_cascade(RID p_light) override { return 0; }
 	virtual uint64_t light_get_version(RID p_light) const override { return 0; }
+	virtual uint32_t light_get_cull_mask(RID p_light) const override { return 0; }
 
 	/* LIGHT INSTANCE API */
 
@@ -89,6 +91,7 @@ public:
 	void light_instance_set_aabb(RID p_light_instance, const AABB &p_aabb) override {}
 	void light_instance_set_shadow_transform(RID p_light_instance, const Projection &p_projection, const Transform3D &p_transform, float p_far, float p_split, int p_pass, float p_shadow_texel_size, float p_bias_scale = 1.0, float p_range_begin = 0, const Vector2 &p_uv_scale = Vector2()) override {}
 	void light_instance_mark_visible(RID p_light_instance) override {}
+	virtual bool light_instance_is_shadow_visible_at_position(RID p_light_instance, const Vector3 &p_position) const override { return false; }
 
 	/* PROBE API */
 	virtual RID reflection_probe_allocate() override { return RID(); }
@@ -101,12 +104,13 @@ public:
 	virtual void reflection_probe_set_ambient_color(RID p_probe, const Color &p_color) override {}
 	virtual void reflection_probe_set_ambient_energy(RID p_probe, float p_energy) override {}
 	virtual void reflection_probe_set_max_distance(RID p_probe, float p_distance) override {}
-	virtual void reflection_probe_set_extents(RID p_probe, const Vector3 &p_extents) override {}
+	virtual void reflection_probe_set_size(RID p_probe, const Vector3 &p_size) override {}
 	virtual void reflection_probe_set_origin_offset(RID p_probe, const Vector3 &p_offset) override {}
 	virtual void reflection_probe_set_as_interior(RID p_probe, bool p_enable) override {}
 	virtual void reflection_probe_set_enable_box_projection(RID p_probe, bool p_enable) override {}
 	virtual void reflection_probe_set_enable_shadows(RID p_probe, bool p_enable) override {}
 	virtual void reflection_probe_set_cull_mask(RID p_probe, uint32_t p_layers) override {}
+	virtual void reflection_probe_set_reflection_mask(RID p_probe, uint32_t p_layers) override {}
 	virtual void reflection_probe_set_resolution(RID p_probe, int p_resolution) override {}
 	virtual void reflection_probe_set_mesh_lod_threshold(RID p_probe, float p_ratio) override {}
 	virtual float reflection_probe_get_mesh_lod_threshold(RID p_probe) const override { return 0.0; }
@@ -114,7 +118,8 @@ public:
 	virtual AABB reflection_probe_get_aabb(RID p_probe) const override { return AABB(); }
 	virtual RS::ReflectionProbeUpdateMode reflection_probe_get_update_mode(RID p_probe) const override { return RenderingServer::REFLECTION_PROBE_UPDATE_ONCE; }
 	virtual uint32_t reflection_probe_get_cull_mask(RID p_probe) const override { return 0; }
-	virtual Vector3 reflection_probe_get_extents(RID p_probe) const override { return Vector3(); }
+	virtual uint32_t reflection_probe_get_reflection_mask(RID p_probe) const override { return 0; }
+	virtual Vector3 reflection_probe_get_size(RID p_probe) const override { return Vector3(); }
 	virtual Vector3 reflection_probe_get_origin_offset(RID p_probe) const override { return Vector3(); }
 	virtual float reflection_probe_get_origin_max_distance(RID p_probe) const override { return 0.0; }
 	virtual bool reflection_probe_renders_shadows(RID p_probe) const override { return false; }
@@ -131,6 +136,7 @@ public:
 	virtual RID reflection_probe_instance_create(RID p_probe) override { return RID(); }
 	virtual void reflection_probe_instance_free(RID p_instance) override {}
 	virtual void reflection_probe_instance_set_transform(RID p_instance, const Transform3D &p_transform) override {}
+	virtual bool reflection_probe_has_atlas_index(RID p_instance) override { return false; }
 	virtual void reflection_probe_release_atlas_index(RID p_instance) override {}
 	virtual bool reflection_probe_instance_needs_redraw(RID p_instance) override { return false; }
 	virtual bool reflection_probe_instance_has_reflection(RID p_instance) override { return false; }

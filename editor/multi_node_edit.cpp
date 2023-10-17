@@ -48,6 +48,8 @@ bool MultiNodeEdit::_set_impl(const StringName &p_name, const Variant &p_value, 
 
 	if (name == "scripts") { // Script set is intercepted at object level (check Variant Object::get()), so use a different name.
 		name = "script";
+	} else if (name.begins_with("Metadata/")) {
+		name = name.replace_first("Metadata/", "metadata/");
 	}
 
 	Node *node_path_target = nullptr;
@@ -98,6 +100,8 @@ bool MultiNodeEdit::_get(const StringName &p_name, Variant &r_ret) const {
 	String name = p_name;
 	if (name == "scripts") { // Script set is intercepted at object level (check Variant Object::get()), so use a different name.
 		name = "script";
+	} else if (name.begins_with("Metadata/")) {
+		name = name.replace_first("Metadata/", "metadata/");
 	}
 
 	for (const NodePath &E : nodes) {
@@ -137,14 +141,18 @@ void MultiNodeEdit::_get_property_list(List<PropertyInfo> *p_list) const {
 		List<PropertyInfo> plist;
 		n->get_property_list(&plist, true);
 
-		for (const PropertyInfo &F : plist) {
+		for (PropertyInfo F : plist) {
 			if (F.name == "script") {
 				continue; // Added later manually, since this is intercepted before being set (check Variant Object::get()).
+			} else if (F.name.begins_with("metadata/")) {
+				F.name = F.name.replace_first("metadata/", "Metadata/"); // Trick to not get actual metadata edited from MultiNodeEdit.
 			}
+
 			if (!usage.has(F.name)) {
 				PLData pld;
 				pld.uses = 0;
 				pld.info = F;
+				pld.info.name = F.name;
 				usage[F.name] = pld;
 				data_list.push_back(usage.getptr(F.name));
 			}
@@ -236,7 +244,7 @@ int MultiNodeEdit::get_node_count() const {
 }
 
 NodePath MultiNodeEdit::get_node(int p_index) const {
-	ERR_FAIL_INDEX_V(p_index, nodes.size(), NodePath());
+	ERR_FAIL_INDEX_V(p_index, get_node_count(), NodePath());
 	return nodes[p_index];
 }
 

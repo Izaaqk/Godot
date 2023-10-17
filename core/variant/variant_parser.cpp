@@ -30,8 +30,10 @@
 
 #include "variant_parser.h"
 
+#include "core/crypto/crypto_core.h"
 #include "core/input/input_event.h"
 #include "core/io/resource_loader.h"
+#include "core/object/script_language.h"
 #include "core/os/keyboard.h"
 #include "core/string/string_buffer.h"
 
@@ -487,11 +489,11 @@ Error VariantParser::get_token(Stream *p_stream, Token &r_token, int &line, Stri
 						r_token.value = num.as_int();
 					}
 					return OK;
-				} else if (is_ascii_char(cchar) || is_underscore(cchar)) {
+				} else if (is_ascii_alphabet_char(cchar) || is_underscore(cchar)) {
 					StringBuffer<> id;
 					bool first = true;
 
-					while (is_ascii_char(cchar) || is_underscore(cchar) || (!first && is_digit(cchar))) {
+					while (is_ascii_alphabet_char(cchar) || is_underscore(cchar) || (!first && is_digit(cchar))) {
 						id += cchar;
 						cchar = p_stream->get_char();
 						first = false;
@@ -545,7 +547,7 @@ Error VariantParser::_parse_enginecfg(Stream *p_stream, Vector<String> &strings,
 	}
 }
 
-template <class T>
+template <typename T>
 Error VariantParser::_parse_construct(Stream *p_stream, Vector<T> &r_construct, int &line, String &r_err_str) {
 	Token token;
 	get_token(p_stream, token, line, r_err_str);
@@ -589,6 +591,82 @@ Error VariantParser::_parse_construct(Stream *p_stream, Vector<T> &r_construct, 
 
 		r_construct.push_back(token.value);
 		first = false;
+	}
+
+	return OK;
+}
+
+Error VariantParser::_parse_byte_array(Stream *p_stream, Vector<uint8_t> &r_construct, int &line, String &r_err_str) {
+	Token token;
+	get_token(p_stream, token, line, r_err_str);
+	if (token.type != TK_PARENTHESIS_OPEN) {
+		r_err_str = "Expected '(' in constructor";
+		return ERR_PARSE_ERROR;
+	}
+
+	get_token(p_stream, token, line, r_err_str);
+	if (token.type == TK_STRING) {
+		// Base64 encoded array.
+		String base64_encoded_string = token.value;
+		int strlen = base64_encoded_string.length();
+		CharString cstr = base64_encoded_string.ascii();
+
+		size_t arr_len = 0;
+		r_construct.resize(strlen / 4 * 3 + 1);
+		uint8_t *w = r_construct.ptrw();
+		Error err = CryptoCore::b64_decode(&w[0], r_construct.size(), &arr_len, (unsigned char *)cstr.get_data(), strlen);
+		if (err) {
+			r_err_str = "Invalid base64-encoded string";
+			return ERR_PARSE_ERROR;
+		}
+		r_construct.resize(arr_len);
+
+		get_token(p_stream, token, line, r_err_str);
+		if (token.type != TK_PARENTHESIS_CLOSE) {
+			r_err_str = "Expected ')' in constructor";
+			return ERR_PARSE_ERROR;
+		}
+
+	} else if (token.type == TK_NUMBER || token.type == TK_IDENTIFIER) {
+		// Individual elements.
+		while (true) {
+			if (token.type != TK_NUMBER) {
+				bool valid = false;
+				if (token.type == TK_IDENTIFIER) {
+					double real = stor_fix(token.value);
+					if (real != -1) {
+						token.type = TK_NUMBER;
+						token.value = real;
+						valid = true;
+					}
+				}
+				if (!valid) {
+					r_err_str = "Expected number in constructor";
+					return ERR_PARSE_ERROR;
+				}
+			}
+
+			r_construct.push_back(token.value);
+
+			get_token(p_stream, token, line, r_err_str);
+
+			if (token.type == TK_COMMA) {
+				//do none
+			} else if (token.type == TK_PARENTHESIS_CLOSE) {
+				break;
+			} else {
+				r_err_str = "Expected ',' or ')' in constructor";
+				return ERR_PARSE_ERROR;
+			}
+
+			get_token(p_stream, token, line, r_err_str);
+		}
+	} else if (token.type == TK_PARENTHESIS_CLOSE) {
+		// Empty array.
+		return OK;
+	} else {
+		r_err_str = "Expected base64 string, or list of numbers in constructor";
+		return ERR_PARSE_ERROR;
 	}
 
 	return OK;
@@ -865,12 +943,46 @@ Error VariantParser::parse_value(Token &token, Variant &value, Stream *p_stream,
 			}
 
 			get_token(p_stream, token, line, r_err_str);
-			if (token.type != TK_NUMBER) {
-				r_err_str = "Expected number as argument";
+			// Permit empty RID.
+			if (token.type == TK_PARENTHESIS_CLOSE) {
+				value = RID();
+				return OK;
+			} else if (token.type != TK_NUMBER) {
+				r_err_str = "Expected number as argument or ')'";
 				return ERR_PARSE_ERROR;
 			}
 
-			value = token.value;
+			value = RID::from_uint64(token.value);
+
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_PARENTHESIS_CLOSE) {
+				r_err_str = "Expected ')'";
+				return ERR_PARSE_ERROR;
+			}
+		} else if (id == "Signal") {
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_PARENTHESIS_OPEN) {
+				r_err_str = "Expected '('";
+				return ERR_PARSE_ERROR;
+			}
+
+			// Load as empty.
+			value = Signal();
+
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_PARENTHESIS_CLOSE) {
+				r_err_str = "Expected ')'";
+				return ERR_PARSE_ERROR;
+			}
+		} else if (id == "Callable") {
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_PARENTHESIS_OPEN) {
+				r_err_str = "Expected '('";
+				return ERR_PARSE_ERROR;
+			}
+
+			// Load as empty.
+			value = Callable();
 
 			get_token(p_stream, token, line, r_err_str);
 			if (token.type != TK_PARENTHESIS_CLOSE) {
@@ -910,7 +1022,6 @@ Error VariantParser::parse_value(Token &token, Variant &value, Stream *p_stream,
 
 			bool at_key = true;
 			String key;
-			Token token2;
 			bool need_comma = false;
 
 			while (true) {
@@ -920,18 +1031,18 @@ Error VariantParser::parse_value(Token &token, Variant &value, Stream *p_stream,
 				}
 
 				if (at_key) {
-					Error err = get_token(p_stream, token2, line, r_err_str);
+					Error err = get_token(p_stream, token, line, r_err_str);
 					if (err != OK) {
 						return err;
 					}
 
-					if (token2.type == TK_PARENTHESIS_CLOSE) {
+					if (token.type == TK_PARENTHESIS_CLOSE) {
 						value = ref.is_valid() ? Variant(ref) : Variant(obj);
 						return OK;
 					}
 
 					if (need_comma) {
-						if (token2.type != TK_COMMA) {
+						if (token.type != TK_COMMA) {
 							r_err_str = "Expected '}' or ','";
 							return ERR_PARSE_ERROR;
 						} else {
@@ -940,31 +1051,31 @@ Error VariantParser::parse_value(Token &token, Variant &value, Stream *p_stream,
 						}
 					}
 
-					if (token2.type != TK_STRING) {
+					if (token.type != TK_STRING) {
 						r_err_str = "Expected property name as string";
 						return ERR_PARSE_ERROR;
 					}
 
-					key = token2.value;
+					key = token.value;
 
-					err = get_token(p_stream, token2, line, r_err_str);
+					err = get_token(p_stream, token, line, r_err_str);
 
 					if (err != OK) {
 						return err;
 					}
-					if (token2.type != TK_COLON) {
+					if (token.type != TK_COLON) {
 						r_err_str = "Expected ':'";
 						return ERR_PARSE_ERROR;
 					}
 					at_key = false;
 				} else {
-					Error err = get_token(p_stream, token2, line, r_err_str);
+					Error err = get_token(p_stream, token, line, r_err_str);
 					if (err != OK) {
 						return err;
 					}
 
 					Variant v;
-					err = parse_value(token2, v, p_stream, line, r_err_str, p_res_parser);
+					err = parse_value(token, v, p_stream, line, r_err_str, p_res_parser);
 					if (err) {
 						return err;
 					}
@@ -992,7 +1103,10 @@ Error VariantParser::parse_value(Token &token, Variant &value, Stream *p_stream,
 				Ref<Resource> res;
 				Error err = p_res_parser->ext_func(p_res_parser->userdata, p_stream, res, line, r_err_str);
 				if (err) {
-					return err;
+					// If the file is missing, the error can be ignored.
+					if (err != ERR_FILE_NOT_FOUND && err != ERR_CANT_OPEN && err != ERR_FILE_CANT_OPEN) {
+						return err;
+					}
 				}
 
 				value = res;
@@ -1026,9 +1140,92 @@ Error VariantParser::parse_value(Token &token, Variant &value, Stream *p_stream,
 					return ERR_PARSE_ERROR;
 				}
 			}
+		} else if (id == "Array") {
+			Error err = OK;
+
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_BRACKET_OPEN) {
+				r_err_str = "Expected '['";
+				return ERR_PARSE_ERROR;
+			}
+
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_IDENTIFIER) {
+				r_err_str = "Expected type identifier";
+				return ERR_PARSE_ERROR;
+			}
+
+			static HashMap<String, Variant::Type> builtin_types;
+			if (builtin_types.is_empty()) {
+				for (int i = 1; i < Variant::VARIANT_MAX; i++) {
+					builtin_types[Variant::get_type_name((Variant::Type)i)] = (Variant::Type)i;
+				}
+			}
+
+			Array array = Array();
+			bool got_bracket_token = false;
+			if (builtin_types.has(token.value)) {
+				array.set_typed(builtin_types.get(token.value), StringName(), Variant());
+			} else if (token.value == "Resource" || token.value == "SubResource" || token.value == "ExtResource") {
+				Variant resource;
+				err = parse_value(token, resource, p_stream, line, r_err_str, p_res_parser);
+				if (err) {
+					if (token.value == "Resource" && err == ERR_PARSE_ERROR && r_err_str == "Expected '('" && token.type == TK_BRACKET_CLOSE) {
+						err = OK;
+						r_err_str = String();
+						array.set_typed(Variant::OBJECT, token.value, Variant());
+						got_bracket_token = true;
+					} else {
+						return err;
+					}
+				} else {
+					Ref<Script> script = resource;
+					if (script.is_valid() && script->is_valid()) {
+						array.set_typed(Variant::OBJECT, script->get_instance_base_type(), script);
+					}
+				}
+			} else if (ClassDB::class_exists(token.value)) {
+				array.set_typed(Variant::OBJECT, token.value, Variant());
+			}
+
+			if (!got_bracket_token) {
+				get_token(p_stream, token, line, r_err_str);
+				if (token.type != TK_BRACKET_CLOSE) {
+					r_err_str = "Expected ']'";
+					return ERR_PARSE_ERROR;
+				}
+			}
+
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_PARENTHESIS_OPEN) {
+				r_err_str = "Expected '('";
+				return ERR_PARSE_ERROR;
+			}
+
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_BRACKET_OPEN) {
+				r_err_str = "Expected '['";
+				return ERR_PARSE_ERROR;
+			}
+
+			Array values;
+			err = _parse_array(values, p_stream, line, r_err_str, p_res_parser);
+			if (err) {
+				return err;
+			}
+
+			get_token(p_stream, token, line, r_err_str);
+			if (token.type != TK_PARENTHESIS_CLOSE) {
+				r_err_str = "Expected ')'";
+				return ERR_PARSE_ERROR;
+			}
+
+			array.assign(values);
+
+			value = array;
 		} else if (id == "PackedByteArray" || id == "PoolByteArray" || id == "ByteArray") {
 			Vector<uint8_t> args;
-			Error err = _parse_construct<uint8_t>(p_stream, args, line, r_err_str);
+			Error err = _parse_byte_array(p_stream, args, line, r_err_str);
 			if (err) {
 				return err;
 			}
@@ -1194,6 +1391,24 @@ Error VariantParser::parse_value(Token &token, Variant &value, Stream *p_stream,
 				Vector3 *w = arr.ptrw();
 				for (int i = 0; i < len; i++) {
 					w[i] = Vector3(args[i * 3 + 0], args[i * 3 + 1], args[i * 3 + 2]);
+				}
+			}
+
+			value = arr;
+		} else if (id == "PackedVector4Array" || id == "PoolVector4Array" || id == "Vector4Array") {
+			Vector<real_t> args;
+			Error err = _parse_construct<real_t>(p_stream, args, line, r_err_str);
+			if (err) {
+				return err;
+			}
+
+			Vector<Vector4> arr;
+			{
+				int len = args.size() / 4;
+				arr.resize(len);
+				Vector4 *w = arr.ptrw();
+				for (int i = 0; i < len; i++) {
+					w[i] = Vector4(args[i * 4 + 0], args[i * 4 + 1], args[i * 4 + 2], args[i * 4 + 3]);
 				}
 			}
 
@@ -1592,7 +1807,7 @@ static String rtos_fix(double p_value) {
 	}
 }
 
-Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_string_func, void *p_store_string_ud, EncodeResourceFunc p_encode_res_func, void *p_encode_res_ud, int recursion_count) {
+Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_string_func, void *p_store_string_ud, EncodeResourceFunc p_encode_res_func, void *p_encode_res_ud, int p_recursion_count, bool p_compat) {
 	switch (p_variant.get_type()) {
 		case Variant::NIL: {
 			p_store_string_func(p_store_string_ud, "null");
@@ -1614,10 +1829,11 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 		} break;
 		case Variant::STRING: {
 			String str = p_variant;
-
 			str = "\"" + str.c_escape_multiline() + "\"";
 			p_store_string_func(p_store_string_ud, str);
 		} break;
+
+		// Math types.
 		case Variant::VECTOR2: {
 			Vector2 v = p_variant;
 			p_store_string_func(p_store_string_ud, "Vector2(" + rtos_fix(v.x) + ", " + rtos_fix(v.y) + ")");
@@ -1629,12 +1845,10 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 		case Variant::RECT2: {
 			Rect2 aabb = p_variant;
 			p_store_string_func(p_store_string_ud, "Rect2(" + rtos_fix(aabb.position.x) + ", " + rtos_fix(aabb.position.y) + ", " + rtos_fix(aabb.size.x) + ", " + rtos_fix(aabb.size.y) + ")");
-
 		} break;
 		case Variant::RECT2I: {
 			Rect2i aabb = p_variant;
 			p_store_string_func(p_store_string_ud, "Rect2i(" + itos(aabb.position.x) + ", " + itos(aabb.position.y) + ", " + itos(aabb.size.x) + ", " + itos(aabb.size.y) + ")");
-
 		} break;
 		case Variant::VECTOR3: {
 			Vector3 v = p_variant;
@@ -1655,17 +1869,14 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 		case Variant::PLANE: {
 			Plane p = p_variant;
 			p_store_string_func(p_store_string_ud, "Plane(" + rtos_fix(p.normal.x) + ", " + rtos_fix(p.normal.y) + ", " + rtos_fix(p.normal.z) + ", " + rtos_fix(p.d) + ")");
-
 		} break;
 		case Variant::AABB: {
 			AABB aabb = p_variant;
 			p_store_string_func(p_store_string_ud, "AABB(" + rtos_fix(aabb.position.x) + ", " + rtos_fix(aabb.position.y) + ", " + rtos_fix(aabb.position.z) + ", " + rtos_fix(aabb.size.x) + ", " + rtos_fix(aabb.size.y) + ", " + rtos_fix(aabb.size.z) + ")");
-
 		} break;
 		case Variant::QUATERNION: {
 			Quaternion quaternion = p_variant;
 			p_store_string_func(p_store_string_ud, "Quaternion(" + rtos_fix(quaternion.x) + ", " + rtos_fix(quaternion.y) + ", " + rtos_fix(quaternion.z) + ", " + rtos_fix(quaternion.w) + ")");
-
 		} break;
 		case Variant::TRANSFORM2D: {
 			String s = "Transform2D(";
@@ -1680,7 +1891,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, s + ")");
-
 		} break;
 		case Variant::BASIS: {
 			String s = "Basis(";
@@ -1695,7 +1905,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, s + ")");
-
 		} break;
 		case Variant::TRANSFORM3D: {
 			String s = "Transform3D(";
@@ -1729,28 +1938,46 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			p_store_string_func(p_store_string_ud, s + ")");
 		} break;
 
-		// misc types
+		// Misc types.
 		case Variant::COLOR: {
 			Color c = p_variant;
 			p_store_string_func(p_store_string_ud, "Color(" + rtos_fix(c.r) + ", " + rtos_fix(c.g) + ", " + rtos_fix(c.b) + ", " + rtos_fix(c.a) + ")");
-
 		} break;
 		case Variant::STRING_NAME: {
 			String str = p_variant;
-
 			str = "&\"" + str.c_escape() + "\"";
 			p_store_string_func(p_store_string_ud, str);
-
 		} break;
 		case Variant::NODE_PATH: {
 			String str = p_variant;
-
 			str = "NodePath(\"" + str.c_escape() + "\")";
 			p_store_string_func(p_store_string_ud, str);
+		} break;
+		case Variant::RID: {
+			RID rid = p_variant;
+			if (rid == RID()) {
+				p_store_string_func(p_store_string_ud, "RID()");
+			} else {
+				p_store_string_func(p_store_string_ud, "RID(" + itos(rid.get_id()) + ")");
+			}
+		} break;
 
+		// Do not really store these, but ensure that assignments are not empty.
+		case Variant::SIGNAL: {
+			p_store_string_func(p_store_string_ud, "Signal()");
+		} break;
+		case Variant::CALLABLE: {
+			p_store_string_func(p_store_string_ud, "Callable()");
 		} break;
 
 		case Variant::OBJECT: {
+			if (unlikely(p_recursion_count > MAX_RECURSION)) {
+				ERR_PRINT("Max recursion reached");
+				p_store_string_func(p_store_string_ud, "null");
+				return OK;
+			}
+			p_recursion_count++;
+
 			Object *obj = p_variant.get_validated_object();
 
 			if (!obj) {
@@ -1800,7 +2027,7 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 					}
 
 					p_store_string_func(p_store_string_ud, "\"" + E.name + "\":");
-					Error err = write(obj->get(E.name), p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud);
+					Error err = write(obj->get(E.name), p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud, p_recursion_count, p_compat);
 					if (err != OK) {
 						return err;
 					}
@@ -1808,16 +2035,15 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, ")\n");
-
 		} break;
 
 		case Variant::DICTIONARY: {
 			Dictionary dict = p_variant;
-			if (recursion_count > MAX_RECURSION) {
+			if (unlikely(p_recursion_count > MAX_RECURSION)) {
 				ERR_PRINT("Max recursion reached");
 				p_store_string_func(p_store_string_ud, "{}");
 			} else {
-				recursion_count++;
+				p_recursion_count++;
 
 				List<Variant> keys;
 				dict.get_key_list(&keys);
@@ -1830,10 +2056,10 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 
 				p_store_string_func(p_store_string_ud, "{\n");
 				for (List<Variant>::Element *E = keys.front(); E; E = E->next()) {
-					Error err = write(E->get(), p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud, recursion_count);
+					Error err = write(E->get(), p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud, p_recursion_count, p_compat);
 					ERR_CONTINUE_MSG(err != OK, vformat("Error serializing key \"%s\": %s", E->get(), err));
 					p_store_string_func(p_store_string_ud, ": ");
-					err = write(dict[E->get()], p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud, recursion_count);
+					err = write(dict[E->get()], p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud, p_recursion_count, p_compat);
 					ERR_FAIL_COND_V_MSG(err != OK, err, vformat("Error serializing value of key \"%s\": %s", dict[E->get()], E->get(), err));
 					if (E->next()) {
 						p_store_string_func(p_store_string_ud, ",\n");
@@ -1844,24 +2070,56 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 
 				p_store_string_func(p_store_string_ud, "}");
 			}
-
 		} break;
 
 		case Variant::ARRAY: {
-			if (recursion_count > MAX_RECURSION) {
+			Array array = p_variant;
+			if (array.get_typed_builtin() != Variant::NIL) {
+				p_store_string_func(p_store_string_ud, "Array[");
+
+				Variant::Type builtin_type = (Variant::Type)array.get_typed_builtin();
+				StringName class_name = array.get_typed_class_name();
+				Ref<Script> script = array.get_typed_script();
+
+				if (script.is_valid()) {
+					String resource_text = String();
+					if (p_encode_res_func) {
+						resource_text = p_encode_res_func(p_encode_res_ud, script);
+					}
+					if (resource_text.is_empty() && script->get_path().is_resource_file()) {
+						resource_text = "Resource(\"" + script->get_path() + "\")";
+					}
+
+					if (!resource_text.is_empty()) {
+						p_store_string_func(p_store_string_ud, resource_text);
+					} else {
+						ERR_PRINT("Failed to encode a path to a custom script for an array type.");
+						p_store_string_func(p_store_string_ud, class_name);
+					}
+				} else if (class_name != StringName()) {
+					p_store_string_func(p_store_string_ud, class_name);
+				} else {
+					p_store_string_func(p_store_string_ud, Variant::get_type_name(builtin_type));
+				}
+
+				p_store_string_func(p_store_string_ud, "](");
+			}
+
+			if (unlikely(p_recursion_count > MAX_RECURSION)) {
 				ERR_PRINT("Max recursion reached");
 				p_store_string_func(p_store_string_ud, "[]");
 			} else {
-				recursion_count++;
+				p_recursion_count++;
 
 				p_store_string_func(p_store_string_ud, "[");
-				Array array = p_variant;
-				int len = array.size();
-				for (int i = 0; i < len; i++) {
-					if (i > 0) {
+				bool first = true;
+				for (const Variant &var : array) {
+					if (first) {
+						first = false;
+					} else {
 						p_store_string_func(p_store_string_ud, ", ");
 					}
-					Error err = write(array[i], p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud, recursion_count);
+					Error err = write(var, p_store_string_func, p_store_string_ud, p_encode_res_func, p_encode_res_ud, p_recursion_count, p_compat);
 					if (err != OK) {
 						return err;
 					}
@@ -1870,25 +2128,29 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 				p_store_string_func(p_store_string_ud, "]");
 			}
 
+			if (array.get_typed_builtin() != Variant::NIL) {
+				p_store_string_func(p_store_string_ud, ")");
+			}
 		} break;
 
 		case Variant::PACKED_BYTE_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedByteArray(");
-			String s;
 			Vector<uint8_t> data = p_variant;
-			int len = data.size();
-			const uint8_t *ptr = data.ptr();
-
-			for (int i = 0; i < len; i++) {
-				if (i > 0) {
-					p_store_string_func(p_store_string_ud, ", ");
+			if (p_compat) {
+				int len = data.size();
+				const uint8_t *ptr = data.ptr();
+				for (int i = 0; i < len; i++) {
+					if (i > 0) {
+						p_store_string_func(p_store_string_ud, ", ");
+					}
+					p_store_string_func(p_store_string_ud, itos(ptr[i]));
 				}
-
-				p_store_string_func(p_store_string_ud, itos(ptr[i]));
+			} else if (data.size() > 0) {
+				p_store_string_func(p_store_string_ud, "\"");
+				p_store_string_func(p_store_string_ud, CryptoCore::b64_encode_str(data.ptr(), data.size()));
+				p_store_string_func(p_store_string_ud, "\"");
 			}
-
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_INT32_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedInt32Array(");
@@ -1905,7 +2167,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_INT64_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedInt64Array(");
@@ -1922,7 +2183,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_FLOAT32_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedFloat32Array(");
@@ -1938,7 +2198,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_FLOAT64_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedFloat64Array(");
@@ -1954,7 +2213,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_STRING_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedStringArray(");
@@ -1962,19 +2220,14 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			int len = data.size();
 			const String *ptr = data.ptr();
 
-			String s;
-			//write_string("\n");
-
 			for (int i = 0; i < len; i++) {
 				if (i > 0) {
 					p_store_string_func(p_store_string_ud, ", ");
 				}
-				String str = ptr[i];
-				p_store_string_func(p_store_string_ud, "\"" + str.c_escape() + "\"");
+				p_store_string_func(p_store_string_ud, "\"" + ptr[i].c_escape() + "\"");
 			}
 
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_VECTOR2_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedVector2Array(");
@@ -1990,7 +2243,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_VECTOR3_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedVector3Array(");
@@ -2006,7 +2258,6 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 			}
 
 			p_store_string_func(p_store_string_ud, ")");
-
 		} break;
 		case Variant::PACKED_COLOR_ARRAY: {
 			p_store_string_func(p_store_string_ud, "PackedColorArray(");
@@ -2018,12 +2269,27 @@ Error VariantWriter::write(const Variant &p_variant, StoreStringFunc p_store_str
 				if (i > 0) {
 					p_store_string_func(p_store_string_ud, ", ");
 				}
-
 				p_store_string_func(p_store_string_ud, rtos_fix(ptr[i].r) + ", " + rtos_fix(ptr[i].g) + ", " + rtos_fix(ptr[i].b) + ", " + rtos_fix(ptr[i].a));
 			}
-			p_store_string_func(p_store_string_ud, ")");
 
+			p_store_string_func(p_store_string_ud, ")");
 		} break;
+		case Variant::PACKED_VECTOR4_ARRAY: {
+			p_store_string_func(p_store_string_ud, "PackedVector4Array(");
+			Vector<Vector4> data = p_variant;
+			int len = data.size();
+			const Vector4 *ptr = data.ptr();
+
+			for (int i = 0; i < len; i++) {
+				if (i > 0) {
+					p_store_string_func(p_store_string_ud, ", ");
+				}
+				p_store_string_func(p_store_string_ud, rtos_fix(ptr[i].x) + ", " + rtos_fix(ptr[i].y) + ", " + rtos_fix(ptr[i].z) + ", " + rtos_fix(ptr[i].w));
+			}
+
+			p_store_string_func(p_store_string_ud, ")");
+		} break;
+
 		default: {
 			ERR_PRINT(vformat("Couldn't serialize variant %s", p_variant));
 			return ERR_INVALID_DATA;
@@ -2039,8 +2305,8 @@ static Error _write_to_str(void *ud, const String &p_string) {
 	return OK;
 }
 
-Error VariantWriter::write_to_string(const Variant &p_variant, String &r_string, EncodeResourceFunc p_encode_res_func, void *p_encode_res_ud) {
+Error VariantWriter::write_to_string(const Variant &p_variant, String &r_string, EncodeResourceFunc p_encode_res_func, void *p_encode_res_ud, bool p_compat) {
 	r_string = String();
 
-	return write(p_variant, _write_to_str, &r_string, p_encode_res_func, p_encode_res_ud);
+	return write(p_variant, _write_to_str, &r_string, p_encode_res_func, p_encode_res_ud, 0, p_compat);
 }

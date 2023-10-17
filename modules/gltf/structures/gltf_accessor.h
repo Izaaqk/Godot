@@ -32,19 +32,30 @@
 #define GLTF_ACCESSOR_H
 
 #include "../gltf_defines.h"
+
 #include "core/io/resource.h"
+
+enum GLTFAccessorType {
+	TYPE_SCALAR,
+	TYPE_VEC2,
+	TYPE_VEC3,
+	TYPE_VEC4,
+	TYPE_MAT2,
+	TYPE_MAT3,
+	TYPE_MAT4,
+};
 
 struct GLTFAccessor : public Resource {
 	GDCLASS(GLTFAccessor, Resource);
 	friend class GLTFDocument;
 
 private:
-	GLTFBufferViewIndex buffer_view = 0;
+	GLTFBufferViewIndex buffer_view = -1;
 	int byte_offset = 0;
 	int component_type = 0;
 	bool normalized = false;
 	int count = 0;
-	GLTFType type = GLTFType::TYPE_SCALAR;
+	GLTFAccessorType accessor_type = GLTFAccessorType::TYPE_SCALAR;
 	Vector<double> min;
 	Vector<double> max;
 	int sparse_count = 0;
@@ -73,8 +84,8 @@ public:
 	int get_count();
 	void set_count(int p_count);
 
-	int get_type();
-	void set_type(int p_type);
+	int get_accessor_type();
+	void set_accessor_type(int p_accessor_type);
 
 	Vector<double> get_min();
 	void set_min(Vector<double> p_min);

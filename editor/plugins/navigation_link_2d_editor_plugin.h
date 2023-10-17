@@ -31,7 +31,7 @@
 #ifndef NAVIGATION_LINK_2D_EDITOR_PLUGIN_H
 #define NAVIGATION_LINK_2D_EDITOR_PLUGIN_H
 
-#include "editor/editor_plugin.h"
+#include "editor/plugins/editor_plugin.h"
 #include "scene/2d/navigation_link_2d.h"
 
 class CanvasItemEditor;
@@ -43,10 +43,10 @@ class NavigationLink2DEditor : public Control {
 	NavigationLink2D *node = nullptr;
 
 	bool start_grabbed = false;
-	Vector2 original_start_location;
+	Vector2 original_start_position;
 
 	bool end_grabbed = false;
-	Vector2 original_end_location;
+	Vector2 original_end_position;
 
 protected:
 	void _notification(int p_what);

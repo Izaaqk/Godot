@@ -56,16 +56,15 @@ private:
 	Mode mode = MODE_SPATIAL;
 	HashSet<Ref<ShaderInclude>> include_dependencies;
 	String code;
+	String include_path;
 
-	// hack the name of performance
-	// shaders keep a list of ShaderMaterial -> RenderingServer name translations, to make
-	// conversion fast and save memory.
-	mutable bool params_cache_dirty = true;
-	mutable HashMap<StringName, StringName> params_cache; //map a shader param to a material param..
 	HashMap<StringName, HashMap<int, Ref<Texture2D>>> default_textures;
 
 	void _dependency_changed();
+	void _recompile();
 	virtual void _update_shader() const; //used for visual shader
+	Array _get_shader_uniform_list(bool p_get_groups = false);
+
 protected:
 	static void _bind_methods();
 
@@ -74,59 +73,18 @@ public:
 	virtual Mode get_mode() const;
 
 	virtual void set_path(const String &p_path, bool p_take_over = false) override;
+	void set_include_path(const String &p_path);
 
 	void set_code(const String &p_code);
 	String get_code() const;
 
 	void get_shader_uniform_list(List<PropertyInfo> *p_params, bool p_get_groups = false) const;
-	bool has_parameter(const StringName &p_name) const;
 
 	void set_default_texture_parameter(const StringName &p_name, const Ref<Texture2D> &p_texture, int p_index = 0);
 	Ref<Texture2D> get_default_texture_parameter(const StringName &p_name, int p_index = 0) const;
 	void get_default_texture_parameter_list(List<StringName> *r_textures) const;
 
 	virtual bool is_text_shader() const;
-
-	// Finds the shader parameter name for the given property name, which should start with "shader_parameter/".
-	_FORCE_INLINE_ StringName remap_parameter(const StringName &p_property) const {
-		if (params_cache_dirty) {
-			get_shader_uniform_list(nullptr);
-		}
-
-		String n = p_property;
-
-		// Backwards compatibility with old shader parameter names.
-		// Note: The if statements are important to make sure we are only replacing text exactly at index 0.
-		if (n.find("param/") == 0) {
-			n = n.replace_first("param/", "shader_parameter/");
-		}
-		if (n.find("shader_param/") == 0) {
-			n = n.replace_first("shader_param/", "shader_parameter/");
-		}
-		if (n.find("shader_uniform/") == 0) {
-			n = n.replace_first("shader_uniform/", "shader_parameter/");
-		}
-
-		{
-			// Additional backwards compatibility for projects between #62972 and #64092 (about a month of v4.0 development).
-			// These projects did not have any prefix for shader uniforms due to a bug.
-			// This code should be removed during beta or rc of 4.0.
-			const HashMap<StringName, StringName>::Iterator E = params_cache.find(n);
-			if (E) {
-				return E->value;
-			}
-		}
-
-		if (n.begins_with("shader_parameter/")) {
-			n = n.replace_first("shader_parameter/", "");
-			const HashMap<StringName, StringName>::Iterator E = params_cache.find(n);
-			if (E) {
-				return E->value;
-			}
-		}
-
-		return StringName();
-	}
 
 	virtual RID get_rid() const override;
 
@@ -138,17 +96,17 @@ VARIANT_ENUM_CAST(Shader::Mode);
 
 class ResourceFormatLoaderShader : public ResourceFormatLoader {
 public:
-	virtual Ref<Resource> load(const String &p_path, const String &p_original_path = "", Error *r_error = nullptr, bool p_use_sub_threads = false, float *r_progress = nullptr, CacheMode p_cache_mode = CACHE_MODE_REUSE);
-	virtual void get_recognized_extensions(List<String> *p_extensions) const;
-	virtual bool handles_type(const String &p_type) const;
-	virtual String get_resource_type(const String &p_path) const;
+	virtual Ref<Resource> load(const String &p_path, const String &p_original_path = "", Error *r_error = nullptr, bool p_use_sub_threads = false, float *r_progress = nullptr, CacheMode p_cache_mode = CACHE_MODE_REUSE) override;
+	virtual void get_recognized_extensions(List<String> *p_extensions) const override;
+	virtual bool handles_type(const String &p_type) const override;
+	virtual String get_resource_type(const String &p_path) const override;
 };
 
 class ResourceFormatSaverShader : public ResourceFormatSaver {
 public:
-	virtual Error save(const Ref<Resource> &p_resource, const String &p_path, uint32_t p_flags = 0);
-	virtual void get_recognized_extensions(const Ref<Resource> &p_resource, List<String> *p_extensions) const;
-	virtual bool recognize(const Ref<Resource> &p_resource) const;
+	virtual Error save(const Ref<Resource> &p_resource, const String &p_path, uint32_t p_flags = 0) override;
+	virtual void get_recognized_extensions(const Ref<Resource> &p_resource, List<String> *p_extensions) const override;
+	virtual bool recognize(const Ref<Resource> &p_resource) const override;
 };
 
 #endif // SHADER_H

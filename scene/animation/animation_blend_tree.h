@@ -37,7 +37,12 @@ class AnimationNodeAnimation : public AnimationRootNode {
 	GDCLASS(AnimationNodeAnimation, AnimationRootNode);
 
 	StringName animation;
-	StringName time = "time";
+
+	bool use_custom_timeline = false;
+	double timeline_length = 1.0;
+	Animation::LoopMode loop_mode = Animation::LOOP_NONE;
+	bool stretch_time_scale = true;
+	double start_offset = 0.0;
 
 	uint64_t last_version = 0;
 	bool skip = false;
@@ -50,10 +55,13 @@ public:
 
 	void get_parameter_list(List<PropertyInfo> *r_list) const override;
 
+	virtual NodeTimeInfo get_node_time_info() const override; // Wrapper of get_parameter().
+
 	static Vector<String> (*get_editable_animation_list)();
 
 	virtual String get_caption() const override;
-	virtual double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	void set_animation(const StringName &p_name);
 	StringName get_animation() const;
@@ -63,6 +71,21 @@ public:
 
 	void set_backward(bool p_backward);
 	bool is_backward() const;
+
+	void set_use_custom_timeline(bool p_use_custom_timeline);
+	bool is_using_custom_timeline() const;
+
+	void set_timeline_length(double p_length);
+	double get_timeline_length() const;
+
+	void set_stretch_time_scale(bool p_strech_time_scale);
+	bool is_stretching_time_scale() const;
+
+	void set_start_offset(double p_offset);
+	double get_start_offset() const;
+
+	void set_loop_mode(Animation::LoopMode p_loop_mode);
+	Animation::LoopMode get_loop_mode() const;
 
 	AnimationNodeAnimation();
 
@@ -100,6 +123,7 @@ public:
 		ONE_SHOT_REQUEST_NONE,
 		ONE_SHOT_REQUEST_FIRE,
 		ONE_SHOT_REQUEST_ABORT,
+		ONE_SHOT_REQUEST_FADE_OUT,
 	};
 
 	enum MixMode {
@@ -109,17 +133,21 @@ public:
 
 private:
 	double fade_in = 0.0;
+	Ref<Curve> fade_in_curve;
 	double fade_out = 0.0;
+	Ref<Curve> fade_out_curve;
 
-	bool autorestart = false;
-	double autorestart_delay = 1.0;
-	double autorestart_random_delay = 0.0;
+	bool auto_restart = false;
+	double auto_restart_delay = 1.0;
+	double auto_restart_random_delay = 0.0;
 	MixMode mix = MIX_MODE_BLEND;
+	bool break_loop_at_end = false;
 
 	StringName request = PNAME("request");
 	StringName active = PNAME("active");
-	StringName time = "time";
-	StringName remaining = "remaining";
+	StringName internal_active = PNAME("internal_active");
+	StringName fade_in_remaining = "fade_in_remaining";
+	StringName fade_out_remaining = "fade_out_remaining";
 	StringName time_to_restart = "time_to_restart";
 
 protected:
@@ -132,25 +160,34 @@ public:
 
 	virtual String get_caption() const override;
 
-	void set_fadein_time(double p_time);
-	void set_fadeout_time(double p_time);
+	void set_fade_in_time(double p_time);
+	double get_fade_in_time() const;
 
-	double get_fadein_time() const;
-	double get_fadeout_time() const;
+	void set_fade_in_curve(const Ref<Curve> &p_curve);
+	Ref<Curve> get_fade_in_curve() const;
 
-	void set_autorestart(bool p_active);
-	void set_autorestart_delay(double p_time);
-	void set_autorestart_random_delay(double p_time);
+	void set_fade_out_time(double p_time);
+	double get_fade_out_time() const;
 
-	bool has_autorestart() const;
-	double get_autorestart_delay() const;
-	double get_autorestart_random_delay() const;
+	void set_fade_out_curve(const Ref<Curve> &p_curve);
+	Ref<Curve> get_fade_out_curve() const;
+
+	void set_auto_restart_enabled(bool p_enabled);
+	void set_auto_restart_delay(double p_time);
+	void set_auto_restart_random_delay(double p_time);
+
+	bool is_auto_restart_enabled() const;
+	double get_auto_restart_delay() const;
+	double get_auto_restart_random_delay() const;
 
 	void set_mix_mode(MixMode p_mix);
 	MixMode get_mix_mode() const;
 
+	void set_break_loop_at_end(bool p_enable);
+	bool is_loop_broken_at_end() const;
+
 	virtual bool has_filter() const override;
-	virtual double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	AnimationNodeOneShot();
 };
@@ -173,7 +210,7 @@ public:
 	virtual String get_caption() const override;
 
 	virtual bool has_filter() const override;
-	virtual double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	AnimationNodeAdd2();
 };
@@ -193,7 +230,7 @@ public:
 	virtual String get_caption() const override;
 
 	virtual bool has_filter() const override;
-	virtual double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	AnimationNodeAdd3();
 };
@@ -211,7 +248,7 @@ public:
 	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
 
 	virtual String get_caption() const override;
-	virtual double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	virtual bool has_filter() const override;
 	AnimationNodeBlend2();
@@ -231,8 +268,28 @@ public:
 
 	virtual String get_caption() const override;
 
-	double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 	AnimationNodeBlend3();
+};
+
+class AnimationNodeSub2 : public AnimationNodeSync {
+	GDCLASS(AnimationNodeSub2, AnimationNodeSync);
+
+	StringName sub_amount = PNAME("sub_amount");
+
+protected:
+	static void _bind_methods();
+
+public:
+	void get_parameter_list(List<PropertyInfo> *r_list) const override;
+	virtual Variant get_parameter_default_value(const StringName &p_parameter) const override;
+
+	virtual String get_caption() const override;
+
+	virtual bool has_filter() const override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
+
+	AnimationNodeSub2();
 };
 
 class AnimationNodeTimeScale : public AnimationNode {
@@ -249,7 +306,7 @@ public:
 
 	virtual String get_caption() const override;
 
-	double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	AnimationNodeTimeScale();
 };
@@ -257,7 +314,7 @@ public:
 class AnimationNodeTimeSeek : public AnimationNode {
 	GDCLASS(AnimationNodeTimeSeek, AnimationNode);
 
-	StringName seek_pos = PNAME("seek_position");
+	StringName seek_pos_request = PNAME("seek_request");
 
 protected:
 	static void _bind_methods();
@@ -268,7 +325,7 @@ public:
 
 	virtual String get_caption() const override;
 
-	double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	AnimationNodeTimeSeek();
 };
@@ -276,18 +333,13 @@ public:
 class AnimationNodeTransition : public AnimationNodeSync {
 	GDCLASS(AnimationNodeTransition, AnimationNodeSync);
 
-	enum {
-		MAX_INPUTS = 32
-	};
 	struct InputData {
-		String name;
 		bool auto_advance = false;
+		bool break_loop_at_end = false;
+		bool reset = true;
 	};
+	Vector<InputData> input_data;
 
-	InputData inputs[MAX_INPUTS];
-	int enabled_inputs = 0;
-
-	StringName time = "time";
 	StringName prev_xfading = "prev_xfading";
 	StringName prev_index = "prev_index";
 	StringName current_index = PNAME("current_index");
@@ -299,13 +351,15 @@ class AnimationNodeTransition : public AnimationNodeSync {
 
 	double xfade_time = 0.0;
 	Ref<Curve> xfade_curve;
-	bool reset = true;
+	bool allow_transition_to_self = false;
 
-	void _update_inputs();
+	bool pending_update = false;
 
 protected:
+	bool _get(const StringName &p_path, Variant &r_ret) const;
+	bool _set(const StringName &p_path, const Variant &p_value);
 	static void _bind_methods();
-	void _validate_property(PropertyInfo &p_property) const;
+	void _get_property_list(List<PropertyInfo> *p_list) const;
 
 public:
 	virtual void get_parameter_list(List<PropertyInfo> *r_list) const override;
@@ -314,15 +368,20 @@ public:
 
 	virtual String get_caption() const override;
 
-	void set_enabled_inputs(int p_inputs);
-	int get_enabled_inputs();
+	void set_input_count(int p_inputs);
+
+	virtual bool add_input(const String &p_name) override;
+	virtual void remove_input(int p_index) override;
+	virtual bool set_input_name(int p_input, const String &p_name) override;
 
 	void set_input_as_auto_advance(int p_input, bool p_enable);
 	bool is_input_set_as_auto_advance(int p_input) const;
 
-	void set_input_caption(int p_input, const String &p_name);
-	String get_input_caption(int p_input) const;
-	int find_input_caption(const String &p_name) const;
+	void set_input_break_loop_at_end(int p_input, bool p_enable);
+	bool is_input_loop_broken_at_end(int p_input) const;
+
+	void set_input_reset(int p_input, bool p_enable);
+	bool is_input_reset(int p_input) const;
 
 	void set_xfade_time(double p_fade);
 	double get_xfade_time() const;
@@ -330,10 +389,10 @@ public:
 	void set_xfade_curve(const Ref<Curve> &p_curve);
 	Ref<Curve> get_xfade_curve() const;
 
-	void set_reset(bool p_reset);
-	bool is_reset() const;
+	void set_allow_transition_to_self(bool p_enable);
+	bool is_allow_transition_to_self() const;
 
-	double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	AnimationNodeTransition();
 };
@@ -343,7 +402,7 @@ class AnimationNodeOutput : public AnimationNode {
 
 public:
 	virtual String get_caption() const override;
-	virtual double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 	AnimationNodeOutput();
 };
 
@@ -358,11 +417,10 @@ class AnimationNodeBlendTree : public AnimationRootNode {
 		Vector<StringName> connections;
 	};
 
-	HashMap<StringName, Node> nodes;
+	RBMap<StringName, Node, StringName::AlphCompare> nodes;
 
 	Vector2 graph_offset;
 
-	void _tree_changed();
 	void _node_changed(const StringName &p_node);
 
 	void _initialize_node_tree();
@@ -372,6 +430,10 @@ protected:
 	bool _set(const StringName &p_name, const Variant &p_value);
 	bool _get(const StringName &p_name, Variant &r_ret) const;
 	void _get_property_list(List<PropertyInfo> *p_list) const;
+
+	virtual void _tree_changed() override;
+	virtual void _animation_node_renamed(const ObjectID &p_oid, const String &p_old_name, const String &p_new_name) override;
+	virtual void _animation_node_removed(const ObjectID &p_oid, const StringName &p_node) override;
 
 	virtual void reset_state() override;
 
@@ -412,14 +474,18 @@ public:
 	void get_node_connections(List<NodeConnection> *r_connections) const;
 
 	virtual String get_caption() const override;
-	virtual double process(double p_time, bool p_seek, bool p_is_external_seeking) override;
+	virtual NodeTimeInfo _process(const AnimationMixer::PlaybackInfo p_playback_info, bool p_test_only = false) override;
 
 	void get_node_list(List<StringName> *r_list);
 
 	void set_graph_offset(const Vector2 &p_graph_offset);
 	Vector2 get_graph_offset() const;
 
-	virtual Ref<AnimationNode> get_child_by_name(const StringName &p_name) override;
+	virtual Ref<AnimationNode> get_child_by_name(const StringName &p_name) const override;
+
+#ifdef TOOLS_ENABLED
+	virtual void get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const override;
+#endif
 
 	AnimationNodeBlendTree();
 	~AnimationNodeBlendTree();

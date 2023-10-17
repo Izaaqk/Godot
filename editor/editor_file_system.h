@@ -54,6 +54,7 @@ class EditorFileSystemDirectory : public Object {
 	struct FileInfo {
 		String file;
 		StringName type;
+		StringName resource_script_class; // If any resource has script with a global class name, its found here.
 		ResourceUID::ID uid = ResourceUID::INVALID_ID;
 		uint64_t modified_time = 0;
 		uint64_t import_modified_time = 0;
@@ -61,18 +62,11 @@ class EditorFileSystemDirectory : public Object {
 		String import_group_file;
 		Vector<String> deps;
 		bool verified = false; //used for checking changes
+		// These are for script resources only.
 		String script_class_name;
 		String script_class_extends;
 		String script_class_icon_path;
 	};
-
-	struct FileInfoSort {
-		bool operator()(const FileInfo *p_a, const FileInfo *p_b) const {
-			return p_a->file < p_b->file;
-		}
-	};
-
-	void sort_files();
 
 	Vector<FileInfo *> files;
 
@@ -90,6 +84,7 @@ public:
 	String get_file(int p_idx) const;
 	String get_file_path(int p_idx) const;
 	StringName get_file_type(int p_idx) const;
+	StringName get_file_resource_script_class(int p_idx) const;
 	Vector<String> get_file_deps(int p_idx) const;
 	bool get_file_import_is_valid(int p_idx) const;
 	uint64_t get_file_modified_time(int p_idx) const;
@@ -162,7 +157,7 @@ class EditorFileSystem : public Node {
 		EditorFileSystemDirectory::FileInfo *new_file = nullptr;
 	};
 
-	bool use_threads = true;
+	bool use_threads = false;
 	Thread thread;
 	static void _thread_func(void *_userdata);
 
@@ -189,6 +184,7 @@ class EditorFileSystem : public Node {
 	/* Used for reading the filesystem cache file */
 	struct FileCache {
 		String type;
+		String resource_script_class;
 		ResourceUID::ID uid = ResourceUID::INVALID_ID;
 		uint64_t modification_time = 0;
 		uint64_t import_modification_time = 0;
@@ -201,6 +197,7 @@ class EditorFileSystem : public Node {
 	};
 
 	HashMap<String, FileCache> file_cache;
+	HashSet<String> dep_update_list;
 
 	struct ScanProgress {
 		float low = 0;
@@ -217,7 +214,7 @@ class EditorFileSystem : public Node {
 
 	void _scan_fs_changes(EditorFileSystemDirectory *p_dir, const ScanProgress &p_progress);
 
-	void _delete_internal_files(String p_file);
+	void _delete_internal_files(const String &p_file);
 
 	HashSet<String> textfile_extensions;
 	HashSet<String> valid_extensions;
@@ -227,7 +224,7 @@ class EditorFileSystem : public Node {
 
 	Thread thread_sources;
 	bool scanning_changes = false;
-	bool scanning_changes_done = false;
+	SafeFlag scanning_changes_done;
 
 	static void _thread_func_sources(void *_userdata);
 
@@ -238,7 +235,7 @@ class EditorFileSystem : public Node {
 
 	void _update_extensions();
 
-	void _reimport_file(const String &p_file, const HashMap<StringName, Variant> *p_custom_options = nullptr, const String &p_custom_importer = String());
+	Error _reimport_file(const String &p_file, const HashMap<StringName, Variant> &p_custom_options = HashMap<StringName, Variant>(), const String &p_custom_importer = String(), Variant *generator_parameters = nullptr);
 	Error _reimport_group(const String &p_group_file, const Vector<String> &p_files);
 
 	bool _test_for_reimport(const String &p_path, bool p_only_imported_files);
@@ -263,6 +260,14 @@ class EditorFileSystem : public Node {
 	void _update_script_classes();
 	void _update_pending_script_classes();
 
+	Mutex update_scene_mutex;
+	HashSet<String> update_scene_paths;
+	void _queue_update_scene_groups(const String &p_path);
+	void _update_scene_groups();
+	void _update_pending_scene_groups();
+	HashSet<StringName> _get_scene_groups(const String &p_path);
+	void _get_all_scenes(EditorFileSystemDirectory *p_dir, HashSet<String> &r_list);
+
 	String _get_global_script_class(const String &p_type, const String &p_path, String *r_extends, String *r_icon_path) const;
 
 	static Error _resource_import(const String &p_path);
@@ -278,7 +283,7 @@ class EditorFileSystem : public Node {
 	struct ImportThreadData {
 		const ImportFile *reimport_files;
 		int reimport_from;
-		int max_index = 0;
+		SafeNumeric<int> max_index;
 	};
 
 	void _reimport_thread(uint32_t p_index, ImportThreadData *p_import_data);
@@ -286,7 +291,7 @@ class EditorFileSystem : public Node {
 	static ResourceUID::ID _resource_saver_get_resource_id_for_path(const String &p_path, bool p_generate);
 
 	bool _scan_extensions();
-	bool _scan_import_support(Vector<String> reimports);
+	bool _scan_import_support(const Vector<String> &reimports);
 
 	Vector<Ref<EditorFileSystemImportFormatSupportQuery>> import_support_queries;
 
@@ -300,17 +305,21 @@ public:
 	EditorFileSystemDirectory *get_filesystem();
 	bool is_scanning() const;
 	bool is_importing() const { return importing; }
+	bool doing_first_scan() const { return first_scan; }
 	float get_scanning_progress() const;
 	void scan();
 	void scan_changes();
 	void update_file(const String &p_file);
+	void update_files(const Vector<String> &p_script_paths);
 	HashSet<String> get_valid_extensions() const;
+	void register_global_class_script(const String &p_search_path, const String &p_target_path);
 
 	EditorFileSystemDirectory *get_filesystem_path(const String &p_path);
 	String get_file_type(const String &p_file) const;
 	EditorFileSystemDirectory *find_file(const String &p_file, int *r_index) const;
 
 	void reimport_files(const Vector<String> &p_files);
+	Error reimport_append(const String &p_file, const HashMap<StringName, Variant> &p_custom_options, const String &p_custom_importer, Variant p_generator_parameters);
 
 	void reimport_file_with_custom_parameters(const String &p_file, const String &p_importer, const HashMap<StringName, Variant> &p_custom_params);
 

@@ -34,9 +34,17 @@ package org.godotengine.editor
  * Drives the 'run project' window of the Godot Editor.
  */
 class GodotGame : GodotEditor() {
+
+	override fun getGodotAppLayout() = org.godotengine.godot.R.layout.godot_app_layout
+
 	override fun overrideOrientationRequest() = false
 
 	override fun enableLongPressGestures() = false
 
 	override fun enablePanAndScaleGestures() = false
+
+	override fun checkForProjectPermissionsToEnable() {
+		// Nothing to do.. by the time we get here, the project permissions will have already
+		// been requested by the Editor window.
+	}
 }

@@ -30,22 +30,17 @@
 
 #include "aspect_ratio_container.h"
 
+#include "scene/gui/texture_rect.h"
+
 Size2 AspectRatioContainer::get_minimum_size() const {
 	Size2 ms;
 	for (int i = 0; i < get_child_count(); i++) {
-		Control *c = Object::cast_to<Control>(get_child(i));
+		Control *c = as_sortable_control(get_child(i));
 		if (!c) {
 			continue;
 		}
-		if (c->is_set_as_top_level()) {
-			continue;
-		}
-		if (!c->is_visible()) {
-			continue;
-		}
 		Size2 minsize = c->get_combined_minimum_size();
-		ms.width = MAX(ms.width, minsize.width);
-		ms.height = MAX(ms.height, minsize.height);
+		ms = ms.max(minsize);
 	}
 	return ms;
 }
@@ -106,13 +101,20 @@ void AspectRatioContainer::_notification(int p_what) {
 			bool rtl = is_layout_rtl();
 			Size2 size = get_size();
 			for (int i = 0; i < get_child_count(); i++) {
-				Control *c = Object::cast_to<Control>(get_child(i));
+				Control *c = as_sortable_control(get_child(i));
 				if (!c) {
 					continue;
 				}
-				if (c->is_set_as_top_level()) {
-					continue;
+
+				// Temporary fix for editor crash.
+				TextureRect *trect = Object::cast_to<TextureRect>(c);
+				if (trect) {
+					if (trect->get_expand_mode() == TextureRect::EXPAND_FIT_WIDTH_PROPORTIONAL || trect->get_expand_mode() == TextureRect::EXPAND_FIT_HEIGHT_PROPORTIONAL) {
+						WARN_PRINT_ONCE("Proportional TextureRect is currently not supported inside AspectRatioContainer");
+						continue;
+					}
 				}
+
 				Size2 child_minsize = c->get_combined_minimum_size();
 				Size2 child_size = Size2(ratio, 1.0);
 				float scale_factor = 1.0;
@@ -132,8 +134,7 @@ void AspectRatioContainer::_notification(int p_what) {
 					} break;
 				}
 				child_size *= scale_factor;
-				child_size.x = MAX(child_size.x, child_minsize.x);
-				child_size.y = MAX(child_size.y, child_minsize.y);
+				child_size = child_size.max(child_minsize);
 
 				float align_x = 0.5;
 				switch (alignment_horizontal) {

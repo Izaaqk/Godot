@@ -66,13 +66,15 @@ struct PathQueryParameters {
 	Vector3 target_position;
 	uint32_t navigation_layers = 1;
 	BitField<PathMetadataFlags> metadata_flags = PATH_INCLUDE_ALL;
+	bool simplify_path = false;
+	real_t simplify_epsilon = 0.0;
 };
 
 struct PathQueryResult {
-	Vector<Vector3> path;
-	Vector<int32_t> path_types;
+	PackedVector3Array path;
+	PackedInt32Array path_types;
 	TypedArray<RID> path_rids;
-	Vector<int64_t> path_owner_ids;
+	PackedInt64Array path_owner_ids;
 };
 
 } //namespace NavigationUtilities

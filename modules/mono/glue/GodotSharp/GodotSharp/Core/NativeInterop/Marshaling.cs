@@ -1,3 +1,5 @@
+#pragma warning disable CA1707 // Identifiers should not contain underscores
+
 using System;
 using System.Runtime.InteropServices;
 using Godot.Collections;
@@ -51,29 +53,29 @@ namespace Godot.NativeInterop
                     if (type == typeof(Vector2))
                         return Variant.Type.Vector2;
 
-                    if (type == typeof(Vector2i))
-                        return Variant.Type.Vector2i;
+                    if (type == typeof(Vector2I))
+                        return Variant.Type.Vector2I;
 
                     if (type == typeof(Rect2))
                         return Variant.Type.Rect2;
 
-                    if (type == typeof(Rect2i))
-                        return Variant.Type.Rect2i;
+                    if (type == typeof(Rect2I))
+                        return Variant.Type.Rect2I;
 
                     if (type == typeof(Transform2D))
-                        return Variant.Type.Transform2d;
+                        return Variant.Type.Transform2D;
 
                     if (type == typeof(Vector3))
                         return Variant.Type.Vector3;
 
-                    if (type == typeof(Vector3i))
-                        return Variant.Type.Vector3i;
+                    if (type == typeof(Vector3I))
+                        return Variant.Type.Vector3I;
 
                     if (type == typeof(Vector4))
                         return Variant.Type.Vector4;
 
-                    if (type == typeof(Vector4i))
-                        return Variant.Type.Vector4i;
+                    if (type == typeof(Vector4I))
+                        return Variant.Type.Vector4I;
 
                     if (type == typeof(Basis))
                         return Variant.Type.Basis;
@@ -82,12 +84,12 @@ namespace Godot.NativeInterop
                         return Variant.Type.Quaternion;
 
                     if (type == typeof(Transform3D))
-                        return Variant.Type.Transform3d;
+                        return Variant.Type.Transform3D;
 
                     if (type == typeof(Projection))
                         return Variant.Type.Projection;
 
-                    if (type == typeof(AABB))
+                    if (type == typeof(Aabb))
                         return Variant.Type.Aabb;
 
                     if (type == typeof(Color))
@@ -131,6 +133,9 @@ namespace Godot.NativeInterop
                         if (type == typeof(Vector3[]))
                             return Variant.Type.PackedVector3Array;
 
+                        if (type == typeof(Vector4[]))
+                            return Variant.Type.PackedVector4Array;
+
                         if (type == typeof(Color[]))
                             return Variant.Type.PackedColorArray;
 
@@ -140,15 +145,15 @@ namespace Godot.NativeInterop
                         if (type == typeof(NodePath[]))
                             return Variant.Type.Array;
 
-                        if (type == typeof(RID[]))
+                        if (type == typeof(Rid[]))
                             return Variant.Type.Array;
 
-                        if (typeof(Godot.Object[]).IsAssignableFrom(type))
+                        if (typeof(GodotObject[]).IsAssignableFrom(type))
                             return Variant.Type.Array;
                     }
                     else if (type.IsGenericType)
                     {
-                        if (typeof(Godot.Object).IsAssignableFrom(type))
+                        if (typeof(GodotObject).IsAssignableFrom(type))
                             return Variant.Type.Object;
 
                         // We use `IsAssignableFrom` with our helper interfaces to detect generic Godot collections
@@ -167,7 +172,7 @@ namespace Godot.NativeInterop
                     }
                     else
                     {
-                        if (typeof(Godot.Object).IsAssignableFrom(type))
+                        if (typeof(GodotObject).IsAssignableFrom(type))
                             return Variant.Type.Object;
 
                         if (typeof(StringName) == type)
@@ -176,7 +181,7 @@ namespace Godot.NativeInterop
                         if (typeof(NodePath) == type)
                             return Variant.Type.NodePath;
 
-                        if (typeof(RID) == type)
+                        if (typeof(Rid) == type)
                             return Variant.Type.Rid;
 
                         if (typeof(Collections.Dictionary) == type)
@@ -213,13 +218,13 @@ namespace Godot.NativeInterop
             if (p_string.Buffer == IntPtr.Zero)
                 return string.Empty;
 
-            const int sizeOfChar32 = 4;
+            const int SizeOfChar32 = 4;
             byte* bytes = (byte*)p_string.Buffer;
             int size = p_string.Size;
             if (size == 0)
                 return string.Empty;
             size -= 1; // zero at the end
-            int sizeInBytes = size * sizeOfChar32;
+            int sizeInBytes = size * SizeOfChar32;
             return System.Text.Encoding.UTF32.GetString(bytes, sizeInBytes);
         }
 
@@ -232,7 +237,7 @@ namespace Godot.NativeInterop
                 var gcHandle = CustomGCHandle.AllocStrong(p_managed_callable.Delegate);
 
                 IntPtr objectPtr = p_managed_callable.Target != null ?
-                    Object.GetPtr(p_managed_callable.Target) :
+                    GodotObject.GetPtr(p_managed_callable.Target) :
                     IntPtr.Zero;
 
                 unsafe
@@ -259,7 +264,7 @@ namespace Godot.NativeInterop
                 }
 
                 return new godot_callable(method /* Takes ownership of disposable */,
-                    p_managed_callable.Target.GetInstanceId());
+                    p_managed_callable.Target?.GetInstanceId() ?? 0);
             }
         }
 
@@ -310,7 +315,7 @@ namespace Godot.NativeInterop
 
         public static Signal ConvertSignalToManaged(in godot_signal p_signal)
         {
-            var owner = GD.InstanceFromId(p_signal.ObjectId);
+            var owner = GodotObject.InstanceFromId(p_signal.ObjectId);
             var name = StringName.CreateTakingOwnershipOfDisposableValue(
                 NativeFuncs.godotsharp_string_name_new_copy(p_signal.Name));
             return new Signal(owner, name);
@@ -319,7 +324,7 @@ namespace Godot.NativeInterop
         // Array
 
         internal static T[] ConvertNativeGodotArrayToSystemArrayOfGodotObjectType<T>(in godot_array p_array)
-            where T : Godot.Object
+            where T : GodotObject
         {
             var array = Collections.Array.CreateTakingOwnershipOfDisposableValue(
                 NativeFuncs.godotsharp_array_new_copy(p_array));
@@ -361,16 +366,16 @@ namespace Godot.NativeInterop
             return ret;
         }
 
-        internal static RID[] ConvertNativeGodotArrayToSystemArrayOfRID(in godot_array p_array)
+        internal static Rid[] ConvertNativeGodotArrayToSystemArrayOfRid(in godot_array p_array)
         {
             var array = Collections.Array.CreateTakingOwnershipOfDisposableValue(
                 NativeFuncs.godotsharp_array_new_copy(p_array));
 
             int length = array.Count;
-            var ret = new RID[length];
+            var ret = new Rid[length];
 
             for (int i = 0; i < length; i++)
-                ret[i] = array[i].AsRID();
+                ret[i] = array[i].AsRid();
 
             return ret;
         }
@@ -570,6 +575,30 @@ namespace Godot.NativeInterop
                 return new godot_packed_vector3_array();
             fixed (Vector3* src = p_array)
                 return NativeFuncs.godotsharp_packed_vector3_array_new_mem_copy(src, p_array.Length);
+        }
+
+        // PackedVector4Array
+
+        public static unsafe Vector4[] ConvertNativePackedVector4ArrayToSystemArray(godot_packed_vector4_array p_array)
+        {
+            Vector4* buffer = p_array.Buffer;
+            int size = p_array.Size;
+            if (size == 0)
+                return Array.Empty<Vector4>();
+            int sizeInBytes = size * sizeof(Vector4);
+            var array = new Vector4[size];
+            fixed (Vector4* dest = array)
+                Buffer.MemoryCopy(buffer, dest, sizeInBytes, sizeInBytes);
+            return array;
+        }
+
+        public static unsafe godot_packed_vector4_array ConvertSystemArrayToNativePackedVector4Array(
+            Span<Vector4> p_array)
+        {
+            if (p_array.IsEmpty)
+                return new godot_packed_vector4_array();
+            fixed (Vector4* src = p_array)
+                return NativeFuncs.godotsharp_packed_vector4_array_new_mem_copy(src, p_array.Length);
         }
 
         // PackedColorArray

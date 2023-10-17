@@ -28,9 +28,9 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#include "main/main.h"
-
 #include "os_macos.h"
+
+#include "main/main.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -53,20 +53,11 @@ int main(int argc, char **argv) {
 
 	int first_arg = 1;
 	const char *dbg_arg = "-NSDocumentRevisionsDebugMode";
-	printf("arguments\n");
 	for (int i = 0; i < argc; i++) {
 		if (strcmp(dbg_arg, argv[i]) == 0) {
 			first_arg = i + 2;
 		}
-		printf("%i: %s\n", i, argv[i]);
 	}
-
-#ifdef DEBUG_ENABLED
-	// Lets report the path we made current after all that.
-	char cwd[4096];
-	getcwd(cwd, 4096);
-	printf("Current path: %s\n", cwd);
-#endif
 
 	OS_MacOS os;
 	Error err;
@@ -74,19 +65,30 @@ int main(int argc, char **argv) {
 	// We must override main when testing is enabled.
 	TEST_MAIN_OVERRIDE
 
-	err = Main::setup(argv[0], argc - first_arg, &argv[first_arg]);
-
-	if (err == ERR_HELP) { // Returned by --help and --version, so success.
-		return 0;
-	} else if (err != OK) {
-		return 255;
+	@autoreleasepool {
+		err = Main::setup(argv[0], argc - first_arg, &argv[first_arg]);
 	}
 
-	if (Main::start()) {
-		os.run(); // It is actually the OS that decides how to run.
+	if (err != OK) {
+		if (err == ERR_HELP) { // Returned by --help and --version, so success.
+			return EXIT_SUCCESS;
+		}
+		return EXIT_FAILURE;
 	}
 
-	Main::cleanup();
+	int ret;
+	@autoreleasepool {
+		ret = Main::start();
+	}
+	if (ret == EXIT_SUCCESS) {
+		os.run();
+	} else {
+		os.set_exit_code(EXIT_FAILURE);
+	}
+
+	@autoreleasepool {
+		Main::cleanup();
+	}
 
 	return os.get_exit_code();
 }

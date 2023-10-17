@@ -33,35 +33,41 @@
 
 #ifdef X11_ENABLED
 
-#include "servers/display_server.h"
+#include "joypad_linux.h"
 
 #include "core/input/input.h"
+#include "core/os/mutex.h"
+#include "core/os/thread.h"
 #include "core/templates/local_vector.h"
 #include "drivers/alsa/audio_driver_alsa.h"
 #include "drivers/alsamidi/midi_driver_alsamidi.h"
 #include "drivers/pulseaudio/audio_driver_pulseaudio.h"
 #include "drivers/unix/os_unix.h"
-#include "joypad_linux.h"
 #include "servers/audio_server.h"
+#include "servers/display_server.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering_server.h"
 
 #if defined(SPEECHD_ENABLED)
-#include "../tts_linux.h"
+#include "tts_linux.h"
 #endif
 
 #if defined(GLES3_ENABLED)
-#include "gl_manager_x11.h"
+#include "x11/gl_manager_x11.h"
+#include "x11/gl_manager_x11_egl.h"
 #endif
 
+#if defined(RD_ENABLED)
+#include "servers/rendering/rendering_device.h"
+
 #if defined(VULKAN_ENABLED)
-#include "drivers/vulkan/rendering_device_vulkan.h"
-#include "vulkan_context_x11.h"
+#include "x11/rendering_context_driver_vulkan_x11.h"
+#endif
 #endif
 
 #if defined(DBUS_ENABLED)
-#include "../freedesktop_portal_desktop.h"
-#include "../freedesktop_screensaver.h"
+#include "freedesktop_portal_desktop.h"
+#include "freedesktop_screensaver.h"
 #endif
 
 #include <X11/Xatom.h>
@@ -69,14 +75,36 @@
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
 
-#include "dynwrappers/xlib-so_wrap.h"
+#ifdef SOWRAP_ENABLED
+#include "x11/dynwrappers/xlib-so_wrap.h"
 
-#include "dynwrappers/xcursor-so_wrap.h"
-#include "dynwrappers/xext-so_wrap.h"
-#include "dynwrappers/xinerama-so_wrap.h"
-#include "dynwrappers/xinput2-so_wrap.h"
-#include "dynwrappers/xrandr-so_wrap.h"
-#include "dynwrappers/xrender-so_wrap.h"
+#include "x11/dynwrappers/xcursor-so_wrap.h"
+#include "x11/dynwrappers/xext-so_wrap.h"
+#include "x11/dynwrappers/xinerama-so_wrap.h"
+#include "x11/dynwrappers/xinput2-so_wrap.h"
+#include "x11/dynwrappers/xrandr-so_wrap.h"
+#include "x11/dynwrappers/xrender-so_wrap.h"
+
+#include "xkbcommon-so_wrap.h"
+#else
+#include <X11/XKBlib.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+
+#include <X11/Xcursor/Xcursor.h>
+#include <X11/extensions/XInput2.h>
+#include <X11/extensions/Xext.h>
+#include <X11/extensions/Xinerama.h>
+#include <X11/extensions/Xrandr.h>
+#include <X11/extensions/Xrender.h>
+#include <X11/extensions/shape.h>
+
+#ifdef XKB_ENABLED
+#include <xkbcommon/xkbcommon-compose.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
+#include <xkbcommon/xkbcommon.h>
+#endif
+#endif
 
 typedef struct _xrr_monitor_info {
 	Atom name;
@@ -95,8 +123,7 @@ typedef struct _xrr_monitor_info {
 #undef CursorShape
 
 class DisplayServerX11 : public DisplayServer {
-	//No need to register, it's platform-specific and nothing is added
-	//GDCLASS(DisplayServerX11, DisplayServer)
+	// No need to register with GDCLASS, it's platform-specific and nothing is added.
 
 	_THREAD_SAFE_CLASS_
 
@@ -114,10 +141,11 @@ class DisplayServerX11 : public DisplayServer {
 
 #if defined(GLES3_ENABLED)
 	GLManager_X11 *gl_manager = nullptr;
+	GLManagerEGL_X11 *gl_manager_egl = nullptr;
 #endif
-#if defined(VULKAN_ENABLED)
-	VulkanContextX11 *context_vulkan = nullptr;
-	RenderingDeviceVulkan *rendering_device_vulkan = nullptr;
+#if defined(RD_ENABLED)
+	RenderingContextDriver *rendering_context = nullptr;
+	RenderingDevice *rendering_device = nullptr;
 #endif
 
 #if defined(DBUS_ENABLED)
@@ -128,6 +156,7 @@ class DisplayServerX11 : public DisplayServer {
 #ifdef SPEECHD_ENABLED
 	TTS_Linux *tts = nullptr;
 #endif
+	NativeMenu *native_menu = nullptr;
 
 #if defined(DBUS_ENABLED)
 	FreeDesktopPortalDesktop *portal_desktop = nullptr;
@@ -135,14 +164,20 @@ class DisplayServerX11 : public DisplayServer {
 
 	struct WindowData {
 		Window x11_window;
+		Window x11_xim_window;
+		Window parent;
 		::XIC xic;
+		bool ime_active = false;
+		bool ime_in_progress = false;
+		bool ime_suppress_next_keyup = false;
+#ifdef XKB_ENABLED
+		xkb_compose_state *xkb_state = nullptr;
+#endif
 
 		Size2i min_size;
 		Size2i max_size;
 		Point2i position;
 		Size2i size;
-		Point2i im_position;
-		bool im_active = false;
 		Callable rect_changed_callback;
 		Callable event_callback;
 		Callable input_event_callback;
@@ -178,6 +213,16 @@ class DisplayServerX11 : public DisplayServer {
 		unsigned int focus_order = 0;
 	};
 
+	Point2i im_selection;
+	String im_text;
+
+#ifdef XKB_ENABLED
+	bool xkb_loaded_v05p = false;
+	bool xkb_loaded_v08p = false;
+	xkb_context *xkb_ctx = nullptr;
+	xkb_compose_table *dead_tbl = nullptr;
+#endif
+
 	HashMap<WindowID, WindowData> windows;
 
 	unsigned int last_mouse_monitor_mask = 0;
@@ -185,6 +230,7 @@ class DisplayServerX11 : public DisplayServer {
 
 	List<WindowID> popup_list;
 
+	WindowID window_mouseover_id = INVALID_WINDOW_ID;
 	WindowID last_focused_window = INVALID_WINDOW_ID;
 
 	WindowID window_id_counter = MAIN_WINDOW_ID;
@@ -200,6 +246,15 @@ class DisplayServerX11 : public DisplayServer {
 	::Time last_keyrelease_time = 0;
 	::XIM xim;
 	::XIMStyle xim_style;
+
+	static int _xim_preedit_start_callback(::XIM xim, ::XPointer client_data,
+			::XPointer call_data);
+	static void _xim_preedit_done_callback(::XIM xim, ::XPointer client_data,
+			::XPointer call_data);
+	static void _xim_preedit_draw_callback(::XIM xim, ::XPointer client_data,
+			::XIMPreeditDrawCallbackStruct *call_data);
+	static void _xim_preedit_caret_callback(::XIM xim, ::XPointer client_data,
+			::XIMPreeditCaretCallbackStruct *call_data);
 	static void _xim_destroy_callback(::XIM im, ::XPointer client_data,
 			::XPointer call_data);
 
@@ -208,7 +263,6 @@ class DisplayServerX11 : public DisplayServer {
 	Point2i last_click_pos = Point2i(-100, -100);
 	uint64_t last_click_ms = 0;
 	MouseButton last_click_button_index = MouseButton::NONE;
-	BitField<MouseButtonMask> last_button_state;
 	bool app_focused = false;
 	uint64_t time_since_no_focus = 0;
 
@@ -237,7 +291,6 @@ class DisplayServerX11 : public DisplayServer {
 
 	Rect2i _screen_get_rect(int p_screen) const;
 
-	BitField<MouseButtonMask> _get_mouse_button_state(MouseButton p_x11_button, int p_x11_type);
 	void _get_key_modifier_state(unsigned int p_x11_state, Ref<InputEventWithModifiers> state);
 	void _flush_mouse_motion();
 
@@ -252,13 +305,14 @@ class DisplayServerX11 : public DisplayServer {
 
 	String _clipboard_get_impl(Atom p_source, Window x11_window, Atom target) const;
 	String _clipboard_get(Atom p_source, Window x11_window) const;
+	Atom _clipboard_get_image_target(Atom p_source, Window x11_window) const;
 	void _clipboard_transfer_ownership(Atom p_source, Window x11_window) const;
 
 	bool do_mouse_warp = false;
 
 	const char *cursor_theme = nullptr;
 	int cursor_size = 0;
-	XcursorImage *img[CURSOR_MAX];
+	XcursorImage *cursor_img[CURSOR_MAX];
 	Cursor cursors[CURSOR_MAX];
 	Cursor null_cursor;
 	CursorShape current_cursor = CURSOR_ARROW;
@@ -273,7 +327,10 @@ class DisplayServerX11 : public DisplayServer {
 	xrr_get_monitors_t xrr_get_monitors = nullptr;
 	xrr_free_monitors_t xrr_free_monitors = nullptr;
 	void *xrandr_handle = nullptr;
-	Bool xrandr_ext_ok;
+	bool xrandr_ext_ok = true;
+	bool xinerama_ext_ok = true;
+	bool xshaped_ext_ok = true;
+	bool xwayland = false;
 
 	struct Property {
 		unsigned char *data;
@@ -297,10 +354,12 @@ class DisplayServerX11 : public DisplayServer {
 	Context context = CONTEXT_ENGINE;
 
 	WindowID _get_focused_window_or_popup() const;
+	bool _window_focus_check();
 
 	void _send_window_event(const WindowData &wd, WindowEvent p_event);
 	static void _dispatch_input_events(const Ref<InputEvent> &p_event);
 	void _dispatch_input_event(const Ref<InputEvent> &p_event);
+	void _set_input_focus(Window p_window, int p_revert_to);
 
 	mutable Mutex events_mutex;
 	Thread events_thread;
@@ -341,6 +400,10 @@ public:
 #if defined(DBUS_ENABLED)
 	virtual bool is_dark_mode_supported() const override;
 	virtual bool is_dark_mode() const override;
+	virtual void set_system_theme_change_callback(const Callable &p_callable) override;
+
+	virtual Error file_dialog_show(const String &p_title, const String &p_current_directory, const String &p_filename, bool p_show_hidden, FileDialogMode p_mode, const Vector<String> &p_filters, const Callable &p_callback) override;
+	virtual Error file_dialog_with_options_show(const String &p_title, const String &p_current_directory, const String &p_root, const String &p_filename, bool p_show_hidden, FileDialogMode p_mode, const Vector<String> &p_filters, const TypedArray<Dictionary> &p_options, const Callable &p_callback) override;
 #endif
 
 	virtual void mouse_set_mode(MouseMode p_mode) override;
@@ -352,16 +415,21 @@ public:
 
 	virtual void clipboard_set(const String &p_text) override;
 	virtual String clipboard_get() const override;
+	virtual Ref<Image> clipboard_get_image() const override;
+	virtual bool clipboard_has_image() const override;
 	virtual void clipboard_set_primary(const String &p_text) override;
 	virtual String clipboard_get_primary() const override;
 
 	virtual int get_screen_count() const override;
 	virtual int get_primary_screen() const override;
+	virtual int get_keyboard_focus_screen() const override;
 	virtual Point2i screen_get_position(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	virtual Size2i screen_get_size(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	virtual Rect2i screen_get_usable_rect(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	virtual int screen_get_dpi(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 	virtual float screen_get_refresh_rate(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
+	virtual Color screen_get_pixel(const Point2i &p_position) const override;
+	virtual Ref<Image> screen_get_image(int p_screen = SCREEN_OF_MAIN_WINDOW) const override;
 
 #if defined(DBUS_ENABLED)
 	virtual void screen_set_keep_on(bool p_enable) override;
@@ -425,6 +493,9 @@ public:
 	virtual void window_request_attention(WindowID p_window = MAIN_WINDOW_ID) override;
 
 	virtual void window_move_to_foreground(WindowID p_window = MAIN_WINDOW_ID) override;
+	virtual bool window_is_focused(WindowID p_window = MAIN_WINDOW_ID) const override;
+
+	virtual WindowID get_focused_window() const override;
 
 	virtual bool window_can_draw(WindowID p_window = MAIN_WINDOW_ID) const override;
 
@@ -432,6 +503,9 @@ public:
 
 	virtual void window_set_ime_active(const bool p_active, WindowID p_window = MAIN_WINDOW_ID) override;
 	virtual void window_set_ime_position(const Point2i &p_pos, WindowID p_window = MAIN_WINDOW_ID) override;
+
+	virtual Point2i ime_get_selection() const override;
+	virtual String ime_get_text() const override;
 
 	virtual void window_set_vsync_mode(DisplayServer::VSyncMode p_vsync_mode, WindowID p_window = MAIN_WINDOW_ID) override;
 	virtual DisplayServer::VSyncMode window_get_vsync_mode(WindowID p_vsync_mode) const override;
@@ -446,27 +520,29 @@ public:
 	virtual String keyboard_get_layout_language(int p_index) const override;
 	virtual String keyboard_get_layout_name(int p_index) const override;
 	virtual Key keyboard_get_keycode_from_physical(Key p_keycode) const override;
+	virtual Key keyboard_get_label_from_physical(Key p_keycode) const override;
 
 	virtual void process_events() override;
 
 	virtual void release_rendering_thread() override;
-	virtual void make_rendering_thread() override;
 	virtual void swap_buffers() override;
 
 	virtual void set_context(Context p_context) override;
 
+	virtual bool is_window_transparency_available() const override;
+
 	virtual void set_native_icon(const String &p_filename) override;
 	virtual void set_icon(const Ref<Image> &p_icon) override;
 
-	static DisplayServer *create_func(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error);
+	static DisplayServer *create_func(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, Error &r_error);
 	static Vector<String> get_rendering_drivers_func();
 
 	static void register_x11_driver();
 
-	DisplayServerX11(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Error &r_error);
+	DisplayServerX11(const String &p_rendering_driver, WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Vector2i *p_position, const Vector2i &p_resolution, int p_screen, Context p_context, Error &r_error);
 	~DisplayServerX11();
 };
 
-#endif // X11 enabled
+#endif // X11_ENABLED
 
 #endif // DISPLAY_SERVER_X11_H

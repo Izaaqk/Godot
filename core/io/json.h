@@ -36,8 +36,8 @@
 #include "core/io/resource_saver.h"
 #include "core/variant/variant.h"
 
-class JSON : public RefCounted {
-	GDCLASS(JSON, RefCounted);
+class JSON : public Resource {
+	GDCLASS(JSON, Resource);
 
 	enum TokenType {
 		TK_CURLY_BRACKET_OPEN,
@@ -65,6 +65,7 @@ class JSON : public RefCounted {
 		Variant value;
 	};
 
+	String text;
 	Variant data;
 	String err_str;
 	int err_line = 0;
@@ -83,7 +84,9 @@ protected:
 	static void _bind_methods();
 
 public:
-	Error parse(const String &p_json_string);
+	Error parse(const String &p_json_string, bool p_keep_text = false);
+	String get_parsed_text() const;
+
 	static String stringify(const Variant &p_var, const String &p_indent = "", bool p_sort_keys = true, bool p_full_precision = false);
 	static Variant parse_string(const String &p_json_string);
 
@@ -95,17 +98,17 @@ public:
 
 class ResourceFormatLoaderJSON : public ResourceFormatLoader {
 public:
-	virtual Ref<Resource> load(const String &p_path, const String &p_original_path = "", Error *r_error = nullptr, bool p_use_sub_threads = false, float *r_progress = nullptr, CacheMode p_cache_mode = CACHE_MODE_REUSE);
-	virtual void get_recognized_extensions(List<String> *p_extensions) const;
-	virtual bool handles_type(const String &p_type) const;
-	virtual String get_resource_type(const String &p_path) const;
+	virtual Ref<Resource> load(const String &p_path, const String &p_original_path = "", Error *r_error = nullptr, bool p_use_sub_threads = false, float *r_progress = nullptr, CacheMode p_cache_mode = CACHE_MODE_REUSE) override;
+	virtual void get_recognized_extensions(List<String> *p_extensions) const override;
+	virtual bool handles_type(const String &p_type) const override;
+	virtual String get_resource_type(const String &p_path) const override;
 };
 
 class ResourceFormatSaverJSON : public ResourceFormatSaver {
 public:
-	virtual Error save(const Ref<Resource> &p_resource, const String &p_path, uint32_t p_flags = 0);
-	virtual void get_recognized_extensions(const Ref<Resource> &p_resource, List<String> *p_extensions) const;
-	virtual bool recognize(const Ref<Resource> &p_resource) const;
+	virtual Error save(const Ref<Resource> &p_resource, const String &p_path, uint32_t p_flags = 0) override;
+	virtual void get_recognized_extensions(const Ref<Resource> &p_resource, List<String> *p_extensions) const override;
+	virtual bool recognize(const Ref<Resource> &p_resource) const override;
 };
 
 #endif // JSON_H
