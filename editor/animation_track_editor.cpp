@@ -6698,6 +6698,91 @@ void AnimationTrackEditor::_edit_menu_pressed(int p_option) {
 			AnimationPlayerEditor::get_singleton()->get_player()->apply_reset(true);
 		} break;
 
+		case EDIT_CONVERT_TO_BEZIER: {
+			// HERE WE NEED THE CODE TO GENERATE THE TRACK LIST TO CHOOSE FROM. MOSTLY COPIED THIS CODE FROM COPY TRACKS
+			track_convert_select->clear();
+			TreeItem *troot = track_convert_select->create_item();
+
+			for (int i = 0; i < animation->get_track_count(); i++) {
+				NodePath path = animation->track_get_path(i);
+				Node *node = nullptr;
+
+				if (root) {
+					node = root->get_node_or_null(path);
+				}
+
+				String text;
+				Ref<Texture2D> icon = get_editor_theme_icon(SNAME("Node"));
+				if (node) {
+					if (has_theme_icon(node->get_class(), EditorStringName(EditorIcons))) {
+						icon = get_editor_theme_icon(node->get_class());
+					}
+
+					text = node->get_name();
+					Vector<StringName> sn = path.get_subnames();
+					for (int j = 0; j < sn.size(); j++) {
+						text += ".";
+						text += sn[j];
+					}
+
+					path = NodePath(node->get_path().get_names(), path.get_subnames(), true); // Store full path instead for copying.
+				} else {
+					text = path;
+					int sep = text.find(":");
+					if (sep != -1) {
+						text = text.substr(sep + 1, text.length());
+					}
+				}
+
+				String track_type;
+				switch (animation->track_get_type(i)) {
+					case Animation::TYPE_POSITION_3D:
+						track_type = TTR("Position");
+						break;
+					case Animation::TYPE_ROTATION_3D:
+						track_type = TTR("Rotation");
+						break;
+					case Animation::TYPE_SCALE_3D:
+						track_type = TTR("Scale");
+						break;
+					case Animation::TYPE_BLEND_SHAPE:
+						track_type = TTR("BlendShape");
+						break;
+					case Animation::TYPE_METHOD:
+						track_type = TTR("Methods");
+						break;
+					case Animation::TYPE_BEZIER:
+						track_type = TTR("Bezier");
+						break;
+					case Animation::TYPE_AUDIO:
+						track_type = TTR("Audio");
+						break;
+					default: {
+					};
+				}
+				if (!track_type.is_empty()) {
+					text += vformat(" (%s)", track_type);
+				}
+
+				TreeItem *it = track_convert_select->create_item(troot);
+				it->set_editable(0, true);
+				it->set_selectable(0, true);
+				it->set_cell_mode(0, TreeItem::CELL_MODE_CHECK);
+				it->set_icon(0, icon);
+				it->set_text(0, text);
+				Dictionary md;
+				md["track_idx"] = i;
+				md["path"] = path;
+				it->set_metadata(0, md);
+			}
+			//
+			convert_to_bezier_dialog->popup_centered(Size2(350, 500) * EDSCALE);
+		} break;
+
+		case EDIT_CONVERT_TO_BEZIER_CONFIRM: {
+			// CONFIRM CODE
+		} break;
+
 		case EDIT_BAKE_ANIMATION: {
 			bake_dialog->popup_centered(Size2(200, 100) * EDSCALE);
 		} break;
@@ -7359,6 +7444,7 @@ AnimationTrackEditor::AnimationTrackEditor() {
 	edit->get_popup()->add_separator();
 	edit->get_popup()->add_shortcut(ED_SHORTCUT("animation_editor/apply_reset", TTR("Apply Reset")), EDIT_APPLY_RESET);
 	edit->get_popup()->add_separator();
+	edit->get_popup()->add_item(TTR("Convert to Bezier..."), EDIT_CONVERT_TO_BEZIER);
 	edit->get_popup()->add_item(TTR("Bake Animation..."), EDIT_BAKE_ANIMATION);
 	edit->get_popup()->add_item(TTR("Optimize Animation (no undo)..."), EDIT_OPTIMIZE_ANIMATION);
 	edit->get_popup()->add_item(TTR("Clean-Up Animation (no undo)..."), EDIT_CLEAN_UP_ANIMATION);
@@ -7582,6 +7668,30 @@ AnimationTrackEditor::AnimationTrackEditor() {
 	track_copy_select->set_hide_root(true);
 	track_copy_vbox->add_child(track_copy_select);
 	track_copy_dialog->connect("confirmed", callable_mp(this, &AnimationTrackEditor::_edit_menu_pressed).bind(EDIT_COPY_TRACKS_CONFIRM));
+
+	//
+	convert_to_bezier_dialog = memnew(ConfirmationDialog);
+	add_child(convert_to_bezier_dialog);
+	convert_to_bezier_dialog->set_title(TTR("Convert to Bezier..."));
+	convert_to_bezier_dialog->set_ok_button_text(TTR("Convert"));
+
+	VBoxContainer *track_convert_vbox = memnew(VBoxContainer);
+	convert_to_bezier_dialog->add_child(track_convert_vbox);
+
+	track_convert_select = memnew(Tree);
+	track_convert_select->set_auto_translate_mode(AUTO_TRANSLATE_MODE_DISABLED);
+	track_convert_select->set_h_size_flags(SIZE_EXPAND_FILL);
+	track_convert_select->set_v_size_flags(SIZE_EXPAND_FILL);
+	track_convert_select->set_hide_root(true);
+	track_convert_vbox->add_child(track_convert_select);
+	track_convert_vbox->add_child(memnew(Label("In Handles")));
+	track_convert_vbox->add_child(memnew(Label("Out Handles")));
+	track_convert_vbox->add_child(memnew(Label("Handle Mode")));
+
+	track_convert_handles_mode = memnew(OptionButton);
+	track_convert_vbox->add_child(track_convert_handles_mode);
+
+	// TODO connect
 }
 
 AnimationTrackEditor::~AnimationTrackEditor() {

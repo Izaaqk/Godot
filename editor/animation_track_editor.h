@@ -553,6 +553,10 @@ class AnimationTrackEditor : public VBoxContainer {
 
 	////////////// edit menu stuff
 
+	ConfirmationDialog *convert_to_bezier_dialog = nullptr;
+	Tree *track_convert_select = nullptr;
+	OptionButton *track_convert_handles_mode = nullptr;
+
 	ConfirmationDialog *bake_dialog = nullptr;
 	CheckBox *bake_trs = nullptr;
 	CheckBox *bake_blendshape = nullptr;
@@ -689,7 +693,9 @@ public:
 		EDIT_OPTIMIZE_ANIMATION,
 		EDIT_OPTIMIZE_ANIMATION_CONFIRM,
 		EDIT_CLEAN_UP_ANIMATION,
-		EDIT_CLEAN_UP_ANIMATION_CONFIRM
+		EDIT_CLEAN_UP_ANIMATION_CONFIRM,
+		EDIT_CONVERT_TO_BEZIER,
+		EDIT_CONVERT_TO_BEZIER_CONFIRM
 	};
 
 	void add_track_edit_plugin(const Ref<AnimationTrackEditPlugin> &p_plugin);
