@@ -1431,7 +1431,7 @@ void CodeTextEditor::_update_text_editor_theme() {
 		Control *n = Object::cast_to<Control>(status_bar->get_child(i));
 		if (n) {
 			n->add_theme_font_override(SceneStringName(font), status_bar_font);
-			n->add_theme_font_size_override(SNAME("font_size"), status_bar_font_size);
+			n->add_theme_font_size_override(SceneStringName(font_size), status_bar_font_size);
 		}
 	}
 
@@ -1633,12 +1633,12 @@ void CodeTextEditor::remove_all_bookmarks() {
 }
 
 void CodeTextEditor::_zoom_in() {
-	int s = text_editor->get_theme_font_size("font_size");
+	int s = text_editor->get_theme_font_size(SceneStringName(font_size));
 	_zoom_to(zoom_factor * (s + MAX(1.0f, EDSCALE)) / s);
 }
 
 void CodeTextEditor::_zoom_out() {
-	int s = text_editor->get_theme_font_size("font_size");
+	int s = text_editor->get_theme_font_size(SceneStringName(font_size));
 	_zoom_to(zoom_factor * (s - MAX(1.0f, EDSCALE)) / s);
 }
 
@@ -1664,10 +1664,10 @@ void CodeTextEditor::set_zoom_factor(float p_zoom_factor) {
 
 	zoom_button->set_text(itos(Math::round(zoom_factor * 100)) + " %");
 
-	if (text_editor->has_theme_font_size_override("font_size")) {
-		text_editor->remove_theme_font_size_override("font_size");
+	if (text_editor->has_theme_font_size_override(SceneStringName(font_size))) {
+		text_editor->remove_theme_font_size_override(SceneStringName(font_size));
 	}
-	text_editor->add_theme_font_size_override("font_size", new_font_size);
+	text_editor->add_theme_font_size_override(SceneStringName(font_size), new_font_size);
 }
 
 float CodeTextEditor::get_zoom_factor() {
