@@ -7758,11 +7758,29 @@ AnimationTrackEditor::AnimationTrackEditor() {
 	track_convert_select->set_hide_root(true);
 	track_convert_vbox->add_child(track_convert_select);
 	track_convert_vbox->add_child(memnew(Label("In Handles")));
+
+	EditorProperty *in_handles_prop = EditorInspector::instantiate_property_editor(track_convert_vbox, Variant::VECTOR2, "", PropertyHint::PROPERTY_HINT_NONE, "", 0);
+
+	track_convert_vbox->add_child(in_handles_prop);
+
 	track_convert_vbox->add_child(memnew(Label("Out Handles")));
-	track_convert_vbox->add_child(memnew(Label("Handle Mode")));
+
+	HBoxContainer *handles_type_hbox = memnew(HBoxContainer);
+	track_convert_vbox->add_child(handles_type_hbox);
+
+	handles_type_hbox->add_child(memnew(Label("Handle Mode")));
+
+	Container *handles_type_spacing = memnew(Container);
+	handles_type_spacing->set_h_size_flags(SIZE_EXPAND);
+
+	handles_type_hbox->add_child(handles_type_spacing);
 
 	track_convert_handles_mode = memnew(OptionButton);
-	track_convert_vbox->add_child(track_convert_handles_mode);
+	track_convert_handles_mode->add_item(TTR("Free"));
+	track_convert_handles_mode->add_item(TTR("Linear"));
+	track_convert_handles_mode->add_item(TTR("Balanced"));
+	track_convert_handles_mode->add_item(TTR("Mirrored"));
+	handles_type_hbox->add_child(track_convert_handles_mode);
 
 	convert_to_bezier_dialog->connect("confirmed", callable_mp(this, &AnimationTrackEditor::_edit_menu_pressed).bind(EDIT_CONVERT_TO_BEZIER_CONFIRM));
 }

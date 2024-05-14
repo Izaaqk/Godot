@@ -556,6 +556,8 @@ class AnimationTrackEditor : public VBoxContainer {
 	ConfirmationDialog *convert_to_bezier_dialog = nullptr;
 	Tree *track_convert_select = nullptr;
 	OptionButton *track_convert_handles_mode = nullptr;
+	Vector2 *track_convert_in_handles = nullptr;
+	Vector2 *track_convert_out_handles = nullptr;
 
 	ConfirmationDialog *bake_dialog = nullptr;
 	CheckBox *bake_trs = nullptr;
