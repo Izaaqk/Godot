@@ -723,7 +723,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 					select(i, select_mode == SELECT_SINGLE || !mb->is_command_or_control_pressed());
 
 					if (select_mode == SELECT_SINGLE) {
-						emit_signal(SNAME("item_selected"), i);
+						emit_signal(SceneStringName(item_selected), i);
 					} else {
 						emit_signal(SNAME("multi_selected"), i, true);
 					}
@@ -765,7 +765,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 							set_current(i);
 							ensure_current_is_visible();
 							if (select_mode == SELECT_SINGLE) {
-								emit_signal(SNAME("item_selected"), current);
+								emit_signal(SceneStringName(item_selected), current);
 							}
 
 							break;
@@ -788,7 +788,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 				set_current(next);
 				ensure_current_is_visible();
 				if (select_mode == SELECT_SINGLE) {
-					emit_signal(SNAME("item_selected"), current);
+					emit_signal(SceneStringName(item_selected), current);
 				}
 				accept_event();
 			}
@@ -803,7 +803,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 							set_current(i);
 							ensure_current_is_visible();
 							if (select_mode == SELECT_SINGLE) {
-								emit_signal(SNAME("item_selected"), current);
+								emit_signal(SceneStringName(item_selected), current);
 							}
 							break;
 						}
@@ -825,7 +825,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 				set_current(next);
 				ensure_current_is_visible();
 				if (select_mode == SELECT_SINGLE) {
-					emit_signal(SNAME("item_selected"), current);
+					emit_signal(SceneStringName(item_selected), current);
 				}
 				accept_event();
 			}
@@ -838,7 +838,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 					set_current(index);
 					ensure_current_is_visible();
 					if (select_mode == SELECT_SINGLE) {
-						emit_signal(SNAME("item_selected"), current);
+						emit_signal(SceneStringName(item_selected), current);
 					}
 					accept_event();
 					break;
@@ -853,7 +853,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 					set_current(index);
 					ensure_current_is_visible();
 					if (select_mode == SELECT_SINGLE) {
-						emit_signal(SNAME("item_selected"), current);
+						emit_signal(SceneStringName(item_selected), current);
 					}
 					accept_event();
 
@@ -876,7 +876,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 				set_current(next);
 				ensure_current_is_visible();
 				if (select_mode == SELECT_SINGLE) {
-					emit_signal(SNAME("item_selected"), current);
+					emit_signal(SceneStringName(item_selected), current);
 				}
 				accept_event();
 			}
@@ -896,7 +896,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 				set_current(next);
 				ensure_current_is_visible();
 				if (select_mode == SELECT_SINGLE) {
-					emit_signal(SNAME("item_selected"), current);
+					emit_signal(SceneStringName(item_selected), current);
 				}
 				accept_event();
 			}
@@ -952,7 +952,7 @@ void ItemList::gui_input(const Ref<InputEvent> &p_event) {
 						set_current(i);
 						ensure_current_is_visible();
 						if (select_mode == SELECT_SINGLE) {
-							emit_signal(SNAME("item_selected"), current);
+							emit_signal(SceneStringName(item_selected), current);
 						}
 						break;
 					}
