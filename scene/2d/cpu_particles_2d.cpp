@@ -506,6 +506,27 @@ bool CPUParticles2D::get_split_scale() {
 	return split_scale;
 }
 
+void CPUParticles2D::set_seed_mode(ParticlesSeedMode p_seed_mode) {
+	seed_mode = p_seed_mode;
+	notify_property_list_changed();
+}
+
+CPUParticles2D::ParticlesSeedMode CPUParticles2D::get_seed_mode() const {
+	return seed_mode;
+}
+
+void CPUParticles2D::set_seed(uint32_t p_seed) {
+	seed = p_seed;
+}
+
+uint32_t CPUParticles2D::get_seed() const {
+	return seed;
+}
+
+void CPUParticles2D::request_particles_process(real_t p_requested_process_time) {
+	_requested_process_time = p_requested_process_time;
+}
+
 void CPUParticles2D::_validate_property(PropertyInfo &p_property) const {
 	if (p_property.name == "emission_sphere_radius" && (emission_shape != EMISSION_SHAPE_SPHERE && emission_shape != EMISSION_SHAPE_SPHERE_SURFACE)) {
 		p_property.usage = PROPERTY_USAGE_NONE;
@@ -532,6 +553,11 @@ void CPUParticles2D::_validate_property(PropertyInfo &p_property) const {
 	}
 	if (p_property.name.begins_with("scale_curve_") && !split_scale) {
 		p_property.usage = PROPERTY_USAGE_NONE;
+	}
+
+	if (p_property.name == "seed" && seed_mode == PARTICLES_SEED_MODE_RANDOM) {
+		p_property.usage = PROPERTY_USAGE_NO_EDITOR;
+		return;
 	}
 }
 
@@ -575,25 +601,25 @@ void CPUParticles2D::_update_internal() {
 		return;
 	}
 	_set_do_redraw(true);
-
+	double frame_time;
+	if (fixed_fps > 0) {
+		frame_time = 1.0 / fixed_fps;
+	} else {
+		frame_time = 1.0 / 30.0;
+	}
+	double todo = _requested_process_time;
+	_requested_process_time = 0;
 	if (time == 0 && pre_process_time > 0.0) {
-		double frame_time;
-		if (fixed_fps > 0) {
-			frame_time = 1.0 / fixed_fps;
-		} else {
-			frame_time = 1.0 / 30.0;
-		}
-
-		double todo = pre_process_time;
-
-		while (todo >= 0) {
-			_particles_process(frame_time);
-			todo -= frame_time;
-		}
+		todo += pre_process_time;
+	}
+	while (todo >= 0) {
+		_particles_process(frame_time);
+		todo -= frame_time;
 	}
 
+	todo = 0.0;
+
 	if (fixed_fps > 0) {
-		double frame_time = 1.0 / fixed_fps;
 		double decr = frame_time;
 
 		double ldelta = delta;
@@ -602,7 +628,7 @@ void CPUParticles2D::_update_internal() {
 		} else if (ldelta <= 0.0) { //unlikely but..
 			ldelta = 0.001;
 		}
-		double todo = frame_remainder + ldelta;
+		todo = frame_remainder + ldelta;
 
 		while (todo >= frame_time) {
 			_particles_process(frame_time);
@@ -663,13 +689,13 @@ void CPUParticles2D::_particles_process(double p_delta) {
 		double restart_phase = double(i) / double(pcount);
 
 		if (randomness_ratio > 0.0) {
-			uint32_t seed = cycle;
+			uint32_t _seed = cycle;
 			if (restart_phase >= system_phase) {
-				seed -= uint32_t(1);
+				_seed -= uint32_t(1);
 			}
-			seed *= uint32_t(pcount);
-			seed += uint32_t(i);
-			double random = double(idhash(seed) % uint32_t(65536)) / 65536.0;
+			_seed *= uint32_t(pcount);
+			_seed += uint32_t(i);
+			double random = double(idhash(_seed) % uint32_t(65536)) / 65536.0;
 			restart_phase += randomness_ratio * random * 1.0 / double(pcount);
 		}
 
@@ -730,7 +756,11 @@ void CPUParticles2D::_particles_process(double p_delta) {
 				tex_anim_offset = curve_parameters[PARAM_ANGLE]->sample(tv);
 			}
 
-			p.seed = Math::rand();
+			if (seed_mode == ParticlesSeedMode::PARTICLES_SEED_MODE_RANDOM) {
+				seed = Math::rand();
+			}
+
+			p.seed = seed;
 
 			p.angle_rand = Math::randf();
 			p.scale_rand = Math::randf();
@@ -1263,6 +1293,7 @@ void CPUParticles2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_fixed_fps", "fps"), &CPUParticles2D::set_fixed_fps);
 	ClassDB::bind_method(D_METHOD("set_fractional_delta", "enable"), &CPUParticles2D::set_fractional_delta);
 	ClassDB::bind_method(D_METHOD("set_speed_scale", "scale"), &CPUParticles2D::set_speed_scale);
+	ClassDB::bind_method(D_METHOD("request_particles_process", "process_time"), &CPUParticles2D::request_particles_process);
 
 	ClassDB::bind_method(D_METHOD("is_emitting"), &CPUParticles2D::is_emitting);
 	ClassDB::bind_method(D_METHOD("get_amount"), &CPUParticles2D::get_amount);
@@ -1276,6 +1307,11 @@ void CPUParticles2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_fixed_fps"), &CPUParticles2D::get_fixed_fps);
 	ClassDB::bind_method(D_METHOD("get_fractional_delta"), &CPUParticles2D::get_fractional_delta);
 	ClassDB::bind_method(D_METHOD("get_speed_scale"), &CPUParticles2D::get_speed_scale);
+	ClassDB::bind_method(D_METHOD("set_seed_mode", "mode"), &CPUParticles2D::set_seed_mode);
+	ClassDB::bind_method(D_METHOD("get_seed_mode"), &CPUParticles2D::get_seed_mode);
+
+	ClassDB::bind_method(D_METHOD("set_seed", "seed"), &CPUParticles2D::set_seed);
+	ClassDB::bind_method(D_METHOD("get_seed"), &CPUParticles2D::get_seed);
 
 	ClassDB::bind_method(D_METHOD("set_draw_order", "order"), &CPUParticles2D::set_draw_order);
 
@@ -1292,6 +1328,8 @@ void CPUParticles2D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "lifetime", PROPERTY_HINT_RANGE, "0.01,600.0,0.01,or_greater,suffix:s"), "set_lifetime", "get_lifetime");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "one_shot"), "set_one_shot", "get_one_shot");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "preprocess", PROPERTY_HINT_RANGE, "0.00,600.0,0.01,suffix:s"), "set_pre_process_time", "get_pre_process_time");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed_mode", PROPERTY_HINT_ENUM, "Random,Custom"), "set_seed_mode", "get_seed_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "seed", PROPERTY_HINT_RANGE, "1,1000000,1"), "set_seed", "get_seed");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "speed_scale", PROPERTY_HINT_RANGE, "0,64,0.01"), "set_speed_scale", "get_speed_scale");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "explosiveness", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_explosiveness_ratio", "get_explosiveness_ratio");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "randomness", PROPERTY_HINT_RANGE, "0,1,0.01"), "set_randomness_ratio", "get_randomness_ratio");
@@ -1466,6 +1504,9 @@ void CPUParticles2D::_bind_methods() {
 	BIND_ENUM_CONSTANT(EMISSION_SHAPE_POINTS);
 	BIND_ENUM_CONSTANT(EMISSION_SHAPE_DIRECTED_POINTS);
 	BIND_ENUM_CONSTANT(EMISSION_SHAPE_MAX);
+
+	BIND_ENUM_CONSTANT(PARTICLES_SEED_MODE_RANDOM)
+	BIND_ENUM_CONSTANT(PARTICLES_SEED_MODE_CUSTOM)
 }
 
 CPUParticles2D::CPUParticles2D() {
