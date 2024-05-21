@@ -6725,7 +6725,7 @@ void AnimationTrackEditor::_edit_menu_pressed(int p_option) {
 						text += sn[j];
 					}
 
-					path = NodePath(node->get_path().get_names(), path.get_subnames(), true); // Store full path instead for copying.
+					path = NodePath(node->get_path().get_names(), path.get_subnames(), true);
 				} else {
 					text = path;
 					int sep = text.find(":");
@@ -6783,6 +6783,7 @@ void AnimationTrackEditor::_edit_menu_pressed(int p_option) {
 			// CONFIRM CODE
 
 			TreeItem *tree_root = track_convert_select->get_root();
+			int mode = track_convert_handles_mode->get_selected();
 			if (tree_root) {
 				TreeItem *it = tree_root->get_first_child();
 				while (it) {
@@ -6790,54 +6791,10 @@ void AnimationTrackEditor::_edit_menu_pressed(int p_option) {
 					int idx = md["track_idx"];
 					if (it->is_checked(0) && idx >= 0 && idx < animation->get_track_count()) {
 						// Get the track value. Then based on the variant do a switch statement?
-						int key_type = animation->track_get_key_value(idx, 0).get_type(); // TODO deal with tracks with no keys
+						int key_type = animation->track_get_type(idx);
 						NodePath n_path = animation->track_get_path(idx);
 
 						create_bezier_track(String(n_path), idx);
-
-						// if (key_type == Variant::FLOAT) {
-						// 	// animation->add_track(Animation::TYPE_BEZIER);
-						// 	// animation->track_set_path(animation->get_track_count() - 1, n_path);
-						// 	// // Here we need a for loop that goes through each key in the original animation and create each bezier track
-						// 	// int keys = animation->track_get_key_count(idx);
-						// 	// for (int i = 0; i < keys; i++) {
-						// 	// 	float key_time = animation->track_get_key_time(idx, i);
-						// 	// 	float key_value = animation->track_get_key_value(idx, i);
-						// 	// 	animation->bezier_track_insert_key(animation->get_track_count() - 1, key_time, key_value, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-						// 	// }
-						// } else if (key_type == Variant::VECTOR2) {
-						// 	animation->add_track(Animation::TYPE_BEZIER);
-						// 	animation->track_set_path(animation->get_track_count() - 1, String(n_path) + ":x");
-						// 	// Here we need a for loop that goes through each key in the original animation and create each bezier track
-						// 	animation->bezier_track_insert_key(animation->get_track_count() - 1, 0.0, 0.0, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-
-						// 	animation->add_track(Animation::TYPE_BEZIER);
-						// 	animation->track_set_path(animation->get_track_count() - 1, String(n_path) + ":y");
-						// 	// Here we need a for loop that goes through each key in the original animation and create each bezier track
-						// 	animation->bezier_track_insert_key(animation->get_track_count() - 1, 0.0, 0.0, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-						// }
-
-						// switch (key_type.get_type()) {
-						// 	case Variant::FLOAT:
-						// 		animation->add_track(Animation::TYPE_BEZIER);
-						// 		animation->track_set_path(animation->get_track_count() - 1, n_path);
-						// 		// Here we need a for loop that goes through each key in the original animation and create each bezier track
-						// 		animation->bezier_track_insert_key(animation->get_track_count() - 1, 0.0, 0.0, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-						// 		break;
-						// 	case Variant::VECTOR2:
-						// 		animation->add_track(Animation::TYPE_BEZIER);
-						// 		animation->track_set_path(animation->get_track_count() - 1, String(n_path) + ":x");
-						// 		// Here we need a for loop that goes through each key in the original animation and create each bezier track
-						// 		animation->bezier_track_insert_key(animation->get_track_count() - 1, 0.0, 0.0, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-
-						// 		animation->add_track(Animation::TYPE_BEZIER);
-						// 		animation->track_set_path(animation->get_track_count() - 1, String(n_path) + ":y");
-						// 		// Here we need a for loop that goes through each key in the original animation and create each bezier track
-						// 		animation->bezier_track_insert_key(animation->get_track_count() - 1, 0.0, 0.0, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-						// 		break;
-						// 	default:
-						// 		break;
-						// }
 					}
 					it = it->get_next();
 				}
@@ -7757,13 +7714,13 @@ AnimationTrackEditor::AnimationTrackEditor() {
 	track_convert_select->set_v_size_flags(SIZE_EXPAND_FILL);
 	track_convert_select->set_hide_root(true);
 	track_convert_vbox->add_child(track_convert_select);
-	track_convert_vbox->add_child(memnew(Label("In Handles")));
+	// track_convert_vbox->add_child(memnew(Label("In Handles")));
 
-	EditorProperty *in_handles_prop = EditorInspector::instantiate_property_editor(track_convert_vbox, Variant::VECTOR2, "", PropertyHint::PROPERTY_HINT_NONE, "", 0);
+	// EditorProperty *in_handles_prop = EditorInspector::instantiate_property_editor(track_convert_vbox, Variant::VECTOR2, "", PropertyHint::PROPERTY_HINT_NONE, "", 0);
 
-	track_convert_vbox->add_child(in_handles_prop);
+	// track_convert_vbox->add_child(in_handles_prop);
 
-	track_convert_vbox->add_child(memnew(Label("Out Handles")));
+	// track_convert_vbox->add_child(memnew(Label("Out Handles")));
 
 	HBoxContainer *handles_type_hbox = memnew(HBoxContainer);
 	track_convert_vbox->add_child(handles_type_hbox);
@@ -7776,10 +7733,8 @@ AnimationTrackEditor::AnimationTrackEditor() {
 	handles_type_hbox->add_child(handles_type_spacing);
 
 	track_convert_handles_mode = memnew(OptionButton);
-	track_convert_handles_mode->add_item(TTR("Free"));
 	track_convert_handles_mode->add_item(TTR("Linear"));
-	track_convert_handles_mode->add_item(TTR("Balanced"));
-	track_convert_handles_mode->add_item(TTR("Mirrored"));
+	track_convert_handles_mode->add_item(TTR("Balanced Automatic"));
 	handles_type_hbox->add_child(track_convert_handles_mode);
 
 	convert_to_bezier_dialog->connect("confirmed", callable_mp(this, &AnimationTrackEditor::_edit_menu_pressed).bind(EDIT_CONVERT_TO_BEZIER_CONFIRM));
@@ -7809,28 +7764,28 @@ void AnimationTrackEditor::create_bezier_track(String path, int idx) {
 		Variant key_value = animation->track_get_key_value(idx, i);
 		if (type == Variant::FLOAT) {
 			animation->bezier_track_insert_key(animation->get_track_count() - 1, key_time, key_value, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
 		} else if (type == Variant::VECTOR2) {
 			animation->bezier_track_insert_key(animation->get_track_count() - 2, key_time, Vector2(key_value).x, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 2, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 2, i, Animation::HANDLE_MODE_LINEAR);
 			animation->bezier_track_insert_key(animation->get_track_count() - 1, key_time, Vector2(key_value).y, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
 		} else if (type == Variant::VECTOR3) {
 			animation->bezier_track_insert_key(animation->get_track_count() - 3, key_time, Vector3(key_value).x, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 3, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 3, i, Animation::HANDLE_MODE_LINEAR);
 			animation->bezier_track_insert_key(animation->get_track_count() - 2, key_time, Vector3(key_value).y, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 2, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 2, i, Animation::HANDLE_MODE_LINEAR);
 			animation->bezier_track_insert_key(animation->get_track_count() - 1, key_time, Vector3(key_value).z, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
 		} else if (type == Variant::QUATERNION) {
 			animation->bezier_track_insert_key(animation->get_track_count() - 4, key_time, Quaternion(key_value).x, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 4, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 4, i, Animation::HANDLE_MODE_LINEAR);
 			animation->bezier_track_insert_key(animation->get_track_count() - 3, key_time, Quaternion(key_value).y, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 3, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 3, i, Animation::HANDLE_MODE_LINEAR);
 			animation->bezier_track_insert_key(animation->get_track_count() - 2, key_time, Quaternion(key_value).z, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 2, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 2, i, Animation::HANDLE_MODE_LINEAR);
 			animation->bezier_track_insert_key(animation->get_track_count() - 1, key_time, Quaternion(key_value).w, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_MIRRORED);
+			animation->bezier_track_set_key_handle_mode(animation->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
 		}
 	}
 }
