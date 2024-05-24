@@ -256,9 +256,11 @@ class EditorFileSystem : public Node {
 
 	Mutex update_script_mutex;
 	HashSet<String> update_script_paths;
+	HashSet<String> update_script_paths_documentation;
 	void _queue_update_script_class(const String &p_path);
 	void _update_script_classes();
-	void _update_pending_script_classes();
+	void _update_script_documentation();
+	void _process_update_pending();
 
 	Mutex update_scene_mutex;
 	HashSet<String> update_scene_paths;
@@ -295,6 +297,10 @@ class EditorFileSystem : public Node {
 
 	Vector<Ref<EditorFileSystemImportFormatSupportQuery>> import_support_queries;
 
+	void _remove_invalid_global_class_name();
+	void _remove_invalid_global_class_name_internal(EditorFileSystemDirectory *p_dir, HashSet<String> *p_existing_class_name);
+	String _get_file_by_class_name(EditorFileSystemDirectory *p_dir, const String &p_class_name);
+
 protected:
 	void _notification(int p_what);
 	static void _bind_methods();
@@ -304,6 +310,7 @@ public:
 
 	EditorFileSystemDirectory *get_filesystem();
 	bool is_scanning() const;
+	bool is_ready() const;
 	bool is_importing() const { return importing; }
 	bool doing_first_scan() const { return first_scan; }
 	float get_scanning_progress() const;

@@ -105,9 +105,6 @@ protected:
 	HashMap<StringName, String> global_groups;
 	HashMap<StringName, HashSet<StringName>> scene_groups_cache;
 
-	Array global_class_list;
-	bool is_global_class_list_loaded = false;
-
 	String project_data_dir_name;
 
 	bool _set(const StringName &p_name, const Variant &p_value);
@@ -153,12 +150,10 @@ public:
 
 	void set_setting(const String &p_setting, const Variant &p_value);
 	Variant get_setting(const String &p_setting, const Variant &p_default_value = Variant()) const;
-	TypedArray<Dictionary> get_global_class_list();
-	void refresh_global_class_list();
-	void store_global_class_list(const Array &p_classes);
-	String get_global_class_list_path() const;
-
 	bool has_setting(const String &p_var) const;
+
+	TypedArray<Dictionary> get_global_class_list();
+
 	String localize_path(const String &p_path) const;
 	String globalize_path(const String &p_path) const;
 
