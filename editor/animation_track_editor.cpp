@@ -7754,22 +7754,6 @@ void AnimationTrackEditor::create_bezier_track(Ref<Animation> anim, String path,
 		anim->track_set_path(anim->get_track_count() - 1, path + subindices[i]);
 	}
 
-	// if (type == Variant::FLOAT || type == Variant::INT) {
-	// 	anim->add_track(Animation::TYPE_BEZIER);
-	// 	anim->track_set_path(anim->get_track_count() - 1, path);
-	// } else if (type == Variant::VECTOR2 || type == Variant::VECTOR3 || type == Variant::QUATERNION) {
-	// 	anim->add_track(Animation::TYPE_BEZIER);
-	// 	anim->track_set_path(anim->get_track_count() - 1, path + ":x");
-	// 	anim->add_track(Animation::TYPE_BEZIER);
-	// 	anim->track_set_path(anim->get_track_count() - 1, path + ":y");
-	// } else if (type == Variant::VECTOR3 || type == Variant::QUATERNION) {
-	// 	anim->add_track(Animation::TYPE_BEZIER);
-	// 	anim->track_set_path(anim->get_track_count() - 1, path + ":z");
-	// } else if (type == Variant::QUATERNION) {
-	// 	anim->add_track(Animation::TYPE_BEZIER);
-	// 	anim->track_set_path(anim->get_track_count() - 1, path + ":w");
-	// }
-
 	int keys = anim->track_get_key_count(idx);
 	for (int i = 0; i < keys; i++) {
 		float key_time = anim->track_get_key_time(idx, i);
@@ -7785,43 +7769,27 @@ void AnimationTrackEditor::create_bezier_track(Ref<Animation> anim, String path,
 			key_value_sub_values.append(Vector3(key_value).x);
 			key_value_sub_values.append(Vector3(key_value).y);
 			key_value_sub_values.append(Vector3(key_value).z);
-		} else if (type == Variant::VECTOR4 || type == Variant::QUATERNION || type == Variant::COLOR || type == Variant::PLANE) {
+		} else if (type == Variant::VECTOR4 || type == Variant::QUATERNION) {
 			key_value_sub_values.append(Vector4(key_value).x);
 			key_value_sub_values.append(Vector4(key_value).y);
 			key_value_sub_values.append(Vector4(key_value).z);
 			key_value_sub_values.append(Vector4(key_value).w);
+		} else if (type == Variant::COLOR) {
+			key_value_sub_values.append(Color(key_value).r);
+			key_value_sub_values.append(Color(key_value).g);
+			key_value_sub_values.append(Color(key_value).b);
+			key_value_sub_values.append(Color(key_value).a);
+		} else if (type == Variant::PLANE) {
+			key_value_sub_values.append(Plane(key_value).normal.x);
+			key_value_sub_values.append(Plane(key_value).normal.y);
+			key_value_sub_values.append(Plane(key_value).normal.z);
+			key_value_sub_values.append(Plane(key_value).d);
 		}
 
 		for (int t = 0; t < subindices.size(); t++) {
 			anim->bezier_track_insert_key(anim->get_track_count() - subindices.size() + t, key_time, key_value_sub_values[t], Vector2(0.0, 0.0), Vector2(0.0, 0.0));
 			anim->bezier_track_set_key_handle_mode(anim->get_track_count() - subindices.size() + t, i, Animation::HANDLE_MODE_LINEAR);
 		}
-
-		// if (type == Variant::FLOAT) {
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 1, key_time, key_value, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
-		// } else if (type == Variant::VECTOR2) {
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 2, key_time, Vector2(key_value).x, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 2, i, Animation::HANDLE_MODE_LINEAR);
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 1, key_time, Vector2(key_value).y, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
-		// } else if (type == Variant::VECTOR3) {
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 3, key_time, Vector3(key_value).x, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 3, i, Animation::HANDLE_MODE_LINEAR);
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 2, key_time, Vector3(key_value).y, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 2, i, Animation::HANDLE_MODE_LINEAR);
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 1, key_time, Vector3(key_value).z, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
-		// } else if (type == Variant::QUATERNION) {
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 4, key_time, Quaternion(key_value).x, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 4, i, Animation::HANDLE_MODE_LINEAR);
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 3, key_time, Quaternion(key_value).y, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 3, i, Animation::HANDLE_MODE_LINEAR);
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 2, key_time, Quaternion(key_value).z, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 2, i, Animation::HANDLE_MODE_LINEAR);
-		// 	anim->bezier_track_insert_key(anim->get_track_count() - 1, key_time, Quaternion(key_value).w, Vector2(0.0, 0.0), Vector2(0.0, 0.0));
-		// 	anim->bezier_track_set_key_handle_mode(anim->get_track_count() - 1, i, Animation::HANDLE_MODE_LINEAR);
-		// }
 	}
 }
 
