@@ -1363,6 +1363,12 @@
 		<member name="text_direction" type="int" setter="set_text_direction" getter="get_text_direction" enum="Control.TextDirection" default="0">
 			Base text writing direction.
 		</member>
+		<member name="use_custom_word_separators" type="bool" setter="set_use_custom_word_separators" getter="is_custom_word_separators_enabled" default="false">
+			If [code]false[/code], using [kbd]Ctrl + Left[/kbd] or [kbd]Ctrl + Right[/kbd] ([kbd]Cmd + Left[/kbd] or [kbd]Cmd + Right[/kbd] on macOS) bindings will use the behavior of [member EditorSettings.text_editor/behavior/navigation/use_default_word_separators]. If [code]true[/code], it will also stop the caret if a character within [member EditorSettings.text_editor/behavior/navigation/custom_word_separators] is detected. Useful for subword moving. This behavior also will be applied to the behavior of text selection.
+		</member>
+		<member name="use_default_word_separators" type="bool" setter="set_use_default_word_separators" getter="is_default_word_separators_enabled" default="true">
+			If [code]false[/code], using [kbd]Ctrl + Left[/kbd] or [kbd]Ctrl + Right[/kbd] ([kbd]Cmd + Left[/kbd] or [kbd]Cmd + Right[/kbd] on macOS) bindings will stop moving caret only if a space or punctuation is detected. If [code]true[/code], it will also stop the caret if a character is [code]´`~$^=+|&lt;&gt;[/code], a General Punctuation, or CJK Punctuation. Useful for subword moving. This behavior also will be applied to the behavior of text selection.
+		</member>
 		<member name="virtual_keyboard_enabled" type="bool" setter="set_virtual_keyboard_enabled" getter="is_virtual_keyboard_enabled" default="true">
 			If [code]true[/code], the native virtual keyboard is shown when focused on platforms that support it.
 		</member>
