@@ -422,7 +422,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	// Glow, auto exposure and DoF (if enabled).
 
 	Size2i target_size = rb->get_target_size();
-	bool can_use_effects = target_size.x >= 8 && target_size.y >= 8; // FIXME I think this should check internal size, we do all our post processing at this size...
+	bool can_use_effects = target_size.x >= 8 && target_size.y >= 8 && debug_draw == RS::VIEWPORT_DEBUG_DRAW_DISABLED; // FIXME I think this should check internal size, we do all our post processing at this size...
 	bool can_use_storage = _render_buffers_can_be_storage();
 
 	bool use_fsr = fsr && can_use_effects && rb->get_scaling_3d_mode() == RS::VIEWPORT_SCALING_3D_MODE_FSR;
@@ -699,7 +699,7 @@ void RendererSceneRenderRD::_post_process_subpass(RID p_source_texture, RID p_fr
 	// FIXME: Our input it our internal_texture, shouldn't this be using internal_size ??
 	// Seeing we don't support FSR in our mobile renderer right now target_size = internal_size...
 	Size2i target_size = rb->get_target_size();
-	bool can_use_effects = target_size.x >= 8 && target_size.y >= 8;
+	bool can_use_effects = target_size.x >= 8 && target_size.y >= 8 && debug_draw == RS::VIEWPORT_DEBUG_DRAW_DISABLED;
 
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_switch_to_next_pass();
 
