@@ -30,6 +30,8 @@
 
 #include "texture_layered_editor_plugin.h"
 
+#include "editor/editor_string_names.h"
+#include "editor/themes/editor_scale.h"
 #include "scene/gui/label.h"
 
 void TextureLayeredEditor::gui_input(const Ref<InputEvent> &p_event) {
@@ -59,6 +61,13 @@ void TextureLayeredEditor::_notification(int p_what) {
 
 			draw_texture_rect(checkerboard, Rect2(Point2(), size), true);
 		} break;
+
+		case NOTIFICATION_THEME_CHANGED: {
+			if (info) {
+				Ref<Font> metadata_label_font = get_theme_font(SNAME("expression"), EditorStringName(EditorFonts));
+				info->add_theme_font_override("font", metadata_label_font);
+			}
+		} break;
 	}
 }
 
@@ -86,18 +95,76 @@ void TextureLayeredEditor::_update_material() {
 	materials[2]->set_shader_parameter("normal", v);
 	materials[2]->set_shader_parameter("rot", b);
 
-	String format = Image::get_format_name(texture->get_format());
+	const String format = Image::get_format_name(texture->get_format());
 
-	String text;
-	if (texture->get_layered_type() == TextureLayered::LAYERED_TYPE_2D_ARRAY) {
-		text = itos(texture->get_width()) + "x" + itos(texture->get_height()) + " (x " + itos(texture->get_layers()) + ")" + format;
-	} else if (texture->get_layered_type() == TextureLayered::LAYERED_TYPE_CUBEMAP) {
-		text = itos(texture->get_width()) + "x" + itos(texture->get_height()) + " " + format;
-	} else if (texture->get_layered_type() == TextureLayered::LAYERED_TYPE_CUBEMAP_ARRAY) {
-		text = itos(texture->get_width()) + "x" + itos(texture->get_height()) + " (x " + itos(texture->get_layers() / 6) + ")" + format;
+	if (texture->has_mipmaps()) {
+		const int mip_count = Image::get_image_required_mipmaps(texture->get_width(), texture->get_height(), texture->get_format());
+		const int memory = Image::get_image_data_size(texture->get_width(), texture->get_height(), texture->get_format(), true) * texture->get_layers();
+
+		switch (texture->get_layered_type()) {
+			case TextureLayered::LAYERED_TYPE_2D_ARRAY: {
+				info->set_text(vformat(String::utf8("%d×%d (×%d) %s\n") + TTR("%s Mipmaps") + "\n" + TTR("Memory: %s"),
+						texture->get_width(),
+						texture->get_height(),
+						texture->get_layers(),
+						format,
+						mip_count,
+						String::humanize_size(memory)));
+			} break;
+			case TextureLayered::LAYERED_TYPE_CUBEMAP: {
+				info->set_text(vformat(String::utf8("%d×%d %s\n") + TTR("%s Mipmaps") + "\n" + TTR("Memory: %s"),
+						texture->get_width(),
+						texture->get_height(),
+						format,
+						mip_count,
+						String::humanize_size(memory)));
+			} break;
+			case TextureLayered::LAYERED_TYPE_CUBEMAP_ARRAY: {
+				info->set_text(vformat(String::utf8("%d×%d (×%d) %s\n") + TTR("%s Mipmaps") + "\n" + TTR("Memory: %s"),
+						texture->get_width(),
+						texture->get_height(),
+						texture->get_layers() / 6,
+						format,
+						mip_count,
+						String::humanize_size(memory)));
+			} break;
+
+			default: {
+			}
+		}
+
+	} else {
+		const int memory = Image::get_image_data_size(texture->get_width(), texture->get_height(), texture->get_format(), false) * texture->get_layers();
+
+		switch (texture->get_layered_type()) {
+			case TextureLayered::LAYERED_TYPE_2D_ARRAY: {
+				info->set_text(vformat(String::utf8("%d×%d (×%d) %s\n") + TTR("No Mipmaps") + "\n" + TTR("Memory: %s"),
+						texture->get_width(),
+						texture->get_height(),
+						texture->get_layers(),
+						format,
+						String::humanize_size(memory)));
+			} break;
+			case TextureLayered::LAYERED_TYPE_CUBEMAP: {
+				info->set_text(vformat(String::utf8("%d×%d %s\n") + TTR("No Mipmaps") + "\n" + TTR("Memory: %s"),
+						texture->get_width(),
+						texture->get_height(),
+						format,
+						String::humanize_size(memory)));
+			} break;
+			case TextureLayered::LAYERED_TYPE_CUBEMAP_ARRAY: {
+				info->set_text(vformat(String::utf8("%d×%d (×%d) %s\n") + TTR("No Mipmaps") + "\n" + TTR("Memory: %s"),
+						texture->get_width(),
+						texture->get_height(),
+						texture->get_layers() / 6,
+						format,
+						String::humanize_size(memory)));
+			} break;
+
+			default: {
+			}
+		}
 	}
-
-	info->set_text(text);
 }
 
 void TextureLayeredEditor::_make_shaders() {
@@ -218,7 +285,7 @@ void TextureLayeredEditor::edit(Ref<TextureLayered> p_texture) {
 
 TextureLayeredEditor::TextureLayeredEditor() {
 	set_texture_repeat(TextureRepeat::TEXTURE_REPEAT_ENABLED);
-	set_custom_minimum_size(Size2(1, 150));
+	set_custom_minimum_size(Size2(0, 256.0) * EDSCALE);
 
 	texture_rect = memnew(Control);
 	texture_rect->set_mouse_filter(MOUSE_FILTER_IGNORE);
@@ -236,14 +303,21 @@ TextureLayeredEditor::TextureLayeredEditor() {
 	layer->connect("value_changed", callable_mp(this, &TextureLayeredEditor::_layer_changed));
 
 	info = memnew(Label);
+
+	info->add_theme_color_override("font_color", Color(1, 1, 1));
+	info->add_theme_color_override("font_shadow_color", Color(0, 0, 0));
+
+	info->add_theme_font_size_override("font_size", 14 * EDSCALE);
+	info->add_theme_color_override("font_outline_color", Color(0, 0, 0));
+	info->add_theme_constant_override("outline_size", 8 * EDSCALE);
+
 	info->set_h_grow_direction(GROW_DIRECTION_BEGIN);
 	info->set_v_grow_direction(GROW_DIRECTION_BEGIN);
-	info->add_theme_color_override("font_color", Color(1, 1, 1, 1));
-	info->add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5));
-	info->add_theme_constant_override("shadow_outline_size", 1);
-	info->add_theme_constant_override("shadow_offset_x", 2);
-	info->add_theme_constant_override("shadow_offset_y", 2);
+	info->set_h_size_flags(Control::SIZE_SHRINK_END);
+	info->set_v_size_flags(Control::SIZE_SHRINK_END);
+
 	add_child(info);
+
 	info->set_anchor(SIDE_RIGHT, 1);
 	info->set_anchor(SIDE_LEFT, 1);
 	info->set_anchor(SIDE_BOTTOM, 1);
