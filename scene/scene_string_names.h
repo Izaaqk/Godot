@@ -142,6 +142,7 @@ public:
 
 	StringName pressed;
 	StringName id_pressed;
+	StringName toggled;
 
 	StringName panel;
 };
