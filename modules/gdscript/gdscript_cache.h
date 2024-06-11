@@ -92,7 +92,7 @@ class GDScriptCache {
 
 	bool cleared = false;
 
-	Mutex mutex;
+	BinaryMutex mutex;
 
 public:
 	static void move_script(const String &p_from, const String &p_to);
