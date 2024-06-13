@@ -2359,11 +2359,12 @@ bool Main::iteration() {
 	bool exit = false;
 
 	for (int iters = 0; iters < advance.physics_steps; ++iters) {
+		Engine::get_singleton()->_in_physics = true;
+		Engine::get_singleton()->_physics_frames++;
+
 		if (InputDefault::get_singleton()->is_using_input_buffering() && agile_input_event_flushing) {
 			InputDefault::get_singleton()->flush_buffered_events();
 		}
-
-		Engine::get_singleton()->_in_physics = true;
 
 		uint64_t physics_begin = OS::get_singleton()->get_ticks_usec();
 
@@ -2398,7 +2399,6 @@ bool Main::iteration() {
 
 		physics_process_ticks = MAX(physics_process_ticks, OS::get_singleton()->get_ticks_usec() - physics_begin); // keep the largest one for reference
 		physics_process_max = MAX(OS::get_singleton()->get_ticks_usec() - physics_begin, physics_process_max);
-		Engine::get_singleton()->_physics_frames++;
 
 		Engine::get_singleton()->_in_physics = false;
 	}
