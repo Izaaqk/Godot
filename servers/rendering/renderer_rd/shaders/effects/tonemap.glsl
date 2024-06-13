@@ -388,7 +388,7 @@ vec3 apply_color_correction(vec3 color) {
 // Nvidia Original FXAA 3.11 License
 //----------------------------------------------------------------------------------
 // File:        es3-kepler\FXAA/FXAA3_11.h
-// SDK Version: v3.00 
+// SDK Version: v3.00
 // Email:       gameworks@nvidia.com
 // Site:        http://developer.nvidia.com/
 //
