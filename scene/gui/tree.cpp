@@ -3359,8 +3359,10 @@ void Tree::_go_up() {
 			return;
 		}
 
-		select_single_item(prev, get_root(), selected_col);
-		queue_redraw();
+		if (selected_item) {
+			select_single_item(prev, get_root(), selected_col);
+			queue_redraw();
+		}
 	} else {
 		int col = selected_col < 0 ? 0 : selected_col;
 		while (prev && !prev->cells[col].selectable) {
@@ -3391,8 +3393,10 @@ void Tree::_go_down() {
 			return;
 		}
 
-		select_single_item(next, get_root(), selected_col);
-		queue_redraw();
+		if (selected_item) {
+			select_single_item(next, get_root(), selected_col);
+			queue_redraw();
+		}
 	} else {
 		int col = selected_col < 0 ? 0 : selected_col;
 
