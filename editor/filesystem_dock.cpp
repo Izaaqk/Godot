@@ -207,16 +207,20 @@ String FileSystemDock::_get_entry_script_icon(const EditorFileSystemDirectory *p
 	}
 
 	const String &script_path = deps[0]; // Assuming the first dependency is a script.
-	if (script_path.is_empty() || !ClassDB::is_parent_class(ResourceLoader::get_resource_type(script_path), SNAME("Script"))) {
+	if (script_path.is_empty()) {
 		return String();
 	}
-
 	String *cached = icon_cache.getptr(script_path);
 	if (cached) {
 		return *cached;
 	}
 
 	HashMap<String, String>::Iterator I;
+	if (!ClassDB::is_parent_class(ResourceLoader::get_resource_type(script_path), SNAME("Script"))) {
+		I = icon_cache.insert(script_path, String());
+		return I->value;
+	}
+
 	int script_file;
 	EditorFileSystemDirectory *efsd = EditorFileSystem::get_singleton()->find_file(script_path, &script_file);
 	if (efsd) {
@@ -413,8 +417,6 @@ void FileSystemDock::_update_tree(const Vector<String> &p_uncollapsed_paths, boo
 	tree_update_id++;
 	updating_tree = true;
 	TreeItem *root = tree->create_item();
-
-	icon_cache.clear();
 
 	// Handles the favorites.
 	TreeItem *favorites_item = tree->create_item(root);
@@ -3909,6 +3911,10 @@ void FileSystemDock::load_layout_from_config(Ref<ConfigFile> p_layout, const Str
 		}
 		get_tree_control()->queue_redraw();
 	}
+}
+
+void FileSystemDock::clear_icon_cache() {
+	icon_cache.clear();
 }
 
 FileSystemDock::FileSystemDock() {
