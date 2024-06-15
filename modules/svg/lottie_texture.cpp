@@ -31,7 +31,6 @@
 #include "lottie_texture.h"
 
 #include "core/os/memory.h"
-#include "core/variant/variant.h"
 
 #include <thorvg.h>
 
@@ -69,6 +68,12 @@ void LottieTexture2D::_update_image() {
 		origin_height = fh;
 	}
 	if (json.is_null() || frame_count <= 0) {
+		if (image.is_null()) {
+			image = Image::create_empty(1, 1, false, Image::FORMAT_RGBA8);
+		}
+		if (texture.is_null()) {
+			texture = RenderingServer::get_singleton()->texture_2d_create(image);
+		}
 		return;
 	}
 
@@ -157,17 +162,16 @@ void LottieTexture2D::_update_image() {
 	emit_changed();
 }
 
-Ref<LottieTexture2D> LottieTexture2D::create_from_json(Ref<JSON> p_json, float p_frame_begin, float p_frame_end, int p_frame_count, float p_scale, int p_rows) {
+Ref<LottieTexture2D> LottieTexture2D::create_from_json(Ref<JSON> p_json) {
 	Ref<LottieTexture2D> ret = memnew(LottieTexture2D);
+	Dictionary dict = p_json->get_data();
+	float p_scale = dict.get("gd_scale", 1.0);
+	float p_frame_begin = dict.get("gd_frame_begin", 0);
+	float p_frame_end = dict.get("gd_frame_end", 0);
+	int p_frame_count = dict.get("gd_frame_count", 1);
+	int p_rows = dict.get("gd_rows", -1);
 	ret->update(p_json, p_frame_begin, p_frame_end, p_frame_count, p_scale, p_rows);
 	return ret;
-}
-
-Ref<LottieTexture2D> LottieTexture2D::create_from_string(String p_string, float p_frame_begin, float p_frame_end, int p_frame_count, float p_scale, int p_rows) {
-	Ref<JSON> p_json = memnew(JSON);
-	Error res = p_json->parse(p_string, true);
-	ERR_FAIL_COND_V_MSG(res != OK, nullptr, "LottieTexture2D: Parse JSON failed.");
-	return create_from_json(p_json, p_frame_begin, p_frame_end, p_frame_count, p_scale, p_rows);
 }
 
 void LottieTexture2D::update(Ref<JSON> p_json, float p_frame_begin, float p_frame_end, int p_frame_count, float p_scale, int p_rows) {
@@ -244,8 +248,7 @@ LottieTexture2D::~LottieTexture2D() {
 }
 
 void LottieTexture2D::_bind_methods() {
-	ClassDB::bind_static_method("LottieTexture2D", D_METHOD("create_from_string", "p_string", "p_frame_begin", "p_frame_end", "p_frame_count", "p_scale", "p_rows"), &LottieTexture2D::create_from_string, DEFVAL(0), DEFVAL(0), DEFVAL(1), DEFVAL(1), DEFVAL(-1));
-	ClassDB::bind_static_method("LottieTexture2D", D_METHOD("create_from_json", "p_json", "p_frame_begin", "p_frame_end", "p_frame_count", "p_scale", "p_rows"), &LottieTexture2D::create_from_json, DEFVAL(0), DEFVAL(0), DEFVAL(1), DEFVAL(1), DEFVAL(-1));
+	ClassDB::bind_static_method("LottieTexture2D", D_METHOD("create_from_json", "p_json"), &LottieTexture2D::create_from_json);
 	ClassDB::bind_method(D_METHOD("update", "p_json", "p_frame_begin", "p_frame_end", "p_frame_count", "p_scale", "p_rows"), &LottieTexture2D::update);
 	ClassDB::bind_method(D_METHOD("set_json", "p_json"), &LottieTexture2D::set_json);
 	ClassDB::bind_method(D_METHOD("get_json"), &LottieTexture2D::get_json);
@@ -299,14 +302,7 @@ Ref<Resource> ResourceFormatLoaderLottie::load(const String &p_path, const Strin
 	}
 
 	if (get_resource_type(p_path) == "LottieTexture2D") {
-		Dictionary dict = json->get_data();
-		float p_scale = dict.get("gd_scale", 1.0);
-		float p_frame_begin = dict.get("gd_frame_begin", 0);
-		float p_frame_end = dict.get("gd_frame_end", 0);
-		int p_frame_count = dict.get("gd_frame_count", 1);
-		int p_rows = dict.get("gd_rows", -1);
-
-		ret = LottieTexture2D::create_from_json(json, p_frame_begin, p_frame_end, p_frame_count, p_scale, p_rows);
+		ret = LottieTexture2D::create_from_json(json);
 	} else {
 		if (r_error) {
 			*r_error = ERR_INVALID_DATA;
@@ -331,17 +327,14 @@ bool ResourceFormatLoaderLottie::handles_type(const String &p_type) const {
 
 String ResourceFormatLoaderLottie::get_resource_type(const String &p_path) const {
 	String el = p_path.get_extension().to_lower();
-	if (el == "json") {
-		String str = FileAccess::get_file_as_string(p_path);
-		std::unique_ptr<tvg::Picture> picture = tvg::Picture::gen();
-		// use ThorVG to check if it's Lottie file.
-		tvg::Result res = picture->load(str.utf8(), str.utf8().size(), "lottie", true);
-		if (res != tvg::Result::Success) {
-			return "";
-		}
-		return "LottieTexture2D";
+	String str = FileAccess::get_file_as_string(p_path);
+	std::unique_ptr<tvg::Picture> picture = tvg::Picture::gen();
+	// use ThorVG to check if it's Lottie file.
+	tvg::Result res = picture->load(str.utf8(), str.utf8().size(), "lottie", true);
+	if (res != tvg::Result::Success) {
+		return "";
 	}
-	return "";
+	return "LottieTexture2D";
 }
 
 ////////////////
@@ -350,7 +343,7 @@ Error ResourceFormatSaverLottie::save(const Ref<Resource> &p_resource, const Str
 	Ref<LottieTexture2D> lottie = p_resource;
 	ERR_FAIL_COND_V(lottie.is_null(), ERR_INVALID_PARAMETER);
 
-	// Lottie JSON objects allows storing additional data
+	// Lottie JSON object allows storing additional data
 	Dictionary dict = lottie->get_json().is_valid() ? (Dictionary)lottie->get_json()->get_data() : Dictionary();
 	dict["gd_scale"] = lottie->get_scale();
 	dict["gd_frame_begin"] = lottie->get_frame_begin();
@@ -381,5 +374,5 @@ void ResourceFormatSaverLottie::get_recognized_extensions(const Ref<Resource> &p
 }
 
 bool ResourceFormatSaverLottie::recognize(const Ref<Resource> &p_resource) const {
-	return p_resource->get_class_name() == "LottieTexture2D";
+	return p_resource->is_class("LottieTexture2D");
 }
