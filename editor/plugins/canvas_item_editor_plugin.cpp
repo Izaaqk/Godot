@@ -2525,7 +2525,7 @@ bool CanvasItemEditor::_gui_input_ruler_tool(const Ref<InputEvent> &p_event) {
 		ruler_tool_origin = snap_point(viewport->get_local_mouse_position() / zoom + view_offset);
 	}
 
-	if (b.is_valid() && b->get_button_index() == MouseButton::RIGHT && ruler_tool_active == true) {
+	if (b.is_valid() && b->get_button_index() == MouseButton::RIGHT && ruler_tool_active) {
 		viewport->queue_redraw();
 		return true;
 	}
