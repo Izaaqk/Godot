@@ -87,6 +87,8 @@ Ref<Script> GDScriptLanguage::make_template(const String &p_template, const Stri
 									 .replace(": Array[String]", "")
 									 .replace(": Node", "")
 									 .replace(": CharFXTransform", "")
+									 .replace(": RenderData", "")
+									 .replace(": RenderingDevice", "")
 									 .replace(":=", "=")
 									 .replace(" -> void", "")
 									 .replace(" -> bool", "")
