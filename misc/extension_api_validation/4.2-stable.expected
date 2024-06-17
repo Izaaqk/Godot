@@ -8,6 +8,27 @@ Add new entries at the end of the file.
 
 ## Changes between 4.2-stable and 4.3-stable
 
+GH-93276
+--------
+Validate extension JSON: Error: Field 'builtin_classes/PackedByteArray/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedColorArray/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedFloat32Array/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedFloat64Array/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedInt32Array/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedInt64Array/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedStringArray/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedVector2Array/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Field 'builtin_classes/PackedVector3Array/methods/bsearch': is_const changed value in new API, from false to true.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedByteArray/methods/bsearch', from C976CC02 to 38E0818D. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedColorArray/methods/bsearch', from 12B9744D to 9D572066. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedFloat32Array/methods/bsearch', from 46DBE5D2 to 460AE3FA. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedFloat64Array/methods/bsearch', from 46DBE5D2 to 460AE3FA. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedInt32Array/methods/bsearch', from C976CC02 to 38E0818D. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedInt64Array/methods/bsearch', from C976CC02 to 38E0818D. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedStringArray/methods/bsearch', from 139BC91F to 45D398EF. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedVector2Array/methods/bsearch', from E130405D to C72C96CA. This means that the function has changed and no compatibility function was provided.
+Validate extension JSON: Error: Hash changed for 'builtin_classes/PackedVector3Array/methods/bsearch', from 0D11B28E to 4B0F0D45. This means that the function has changed and no compatibility function was provided.
+
 GH-84660
 --------
 Validate extension JSON: Error: Field 'classes/TileData/methods/get_navigation_polygon/arguments': size changed value in new API, from 1 to 4.
