@@ -148,8 +148,14 @@ void SceneTreeDock::input(const Ref<InputEvent> &p_event) {
 void SceneTreeDock::shortcut_input(const Ref<InputEvent> &p_event) {
 	ERR_FAIL_COND(p_event.is_null());
 
-	if (get_viewport()->gui_get_focus_owner() && get_viewport()->gui_get_focus_owner()->is_text_field()) {
-		return;
+	Control *focus_owner = get_viewport()->gui_get_focus_owner();
+	if (focus_owner) {
+		if (focus_owner->is_text_field()) {
+			return;
+		}
+		if (Object::cast_to<BaseButton>(focus_owner) || Object::cast_to<Range>(focus_owner)) {
+			return;
+		}
 	}
 
 	if (!p_event->is_pressed() || p_event->is_echo()) {
