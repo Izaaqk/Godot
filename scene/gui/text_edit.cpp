@@ -207,6 +207,8 @@ void TextEdit::Text::invalidate_cache(int p_line, int p_column, bool p_text_chan
 	text.write[p_line].data_buf->set_direction((TextServer::Direction)direction);
 	text.write[p_line].data_buf->set_break_flags(flags);
 	text.write[p_line].data_buf->set_preserve_control(draw_control_chars);
+	text.write[p_line].data_buf->set_custom_punctuation(get_word_separators());
+
 	if (p_ime_text.length() > 0) {
 		if (p_text_changed) {
 			text.write[p_line].data_buf->add_string(p_ime_text, font, font_size, language);
@@ -275,6 +277,8 @@ void TextEdit::Text::invalidate_all_lines() {
 		}
 		text.write[i].data_buf->set_width(width);
 		text.write[i].data_buf->set_break_flags(flags);
+		text.write[i].data_buf->set_custom_punctuation(get_word_separators());
+
 		if (tab_size_dirty) {
 			if (tab_size > 0) {
 				Vector<float> tabs;
@@ -437,6 +441,53 @@ void TextEdit::Text::move_gutters(int p_from_line, int p_to_line) {
 	text.write[p_to_line].gutters = text[p_from_line].gutters;
 	text.write[p_from_line].gutters.clear();
 	text.write[p_from_line].gutters.resize(gutter_count);
+}
+
+void TextEdit::Text::set_use_default_word_separators(bool p_enabled) {
+	use_default_word_separators = p_enabled;
+}
+
+void TextEdit::Text::set_use_custom_word_separators(bool p_enabled) {
+	use_custom_word_separators = p_enabled;
+}
+
+bool TextEdit::Text::is_default_word_separators_enabled() const {
+	return use_default_word_separators;
+}
+
+bool TextEdit::Text::is_custom_word_separators_enabled() const {
+	return use_custom_word_separators;
+}
+
+// Set word separators. Primitive. Argument should be concatenated before.
+void TextEdit::Text::set_word_separators(const String &p_separators) {
+	custom_word_separators = p_separators;
+}
+
+String TextEdit::Text::get_custom_word_separators() const {
+	return custom_word_separators;
+}
+
+String TextEdit::Text::get_default_word_separators() const {
+	String concat_separators = "´`~$^=+|<>";
+	for (char32_t ch = 0x2000; ch <= 0x206F; ++ch) { // General punctuation block.
+		concat_separators += ch;
+	}
+	for (char32_t ch = 0x3000; ch <= 0x303F; ++ch) { // CJK punctuation block.
+		concat_separators += ch;
+	}
+	return concat_separators;
+}
+
+String TextEdit::Text::get_word_separators() const {
+	String all_separators;
+	if (use_default_word_separators) {
+		all_separators += get_default_word_separators();
+	}
+	if (use_custom_word_separators) {
+		all_separators += get_custom_word_separators();
+	}
+	return all_separators;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -6277,6 +6328,51 @@ bool TextEdit::is_highlight_all_occurrences_enabled() const {
 	return highlight_all_occurrences;
 }
 
+void TextEdit::set_use_default_word_separators(bool p_enabled) {
+	if (use_default_word_separators == p_enabled) {
+		return;
+	}
+	use_default_word_separators = p_enabled;
+	text.set_use_default_word_separators(p_enabled);
+	text.invalidate_all_lines();
+}
+
+bool TextEdit::is_default_word_separators_enabled() const {
+	return use_default_word_separators;
+}
+
+// Set word separators. Combine default separators with custom separators if those options are enabled.
+void TextEdit::set_custom_word_separators(const String &p_separators) {
+	if (custom_word_separators == p_separators) {
+		return;
+	}
+	custom_word_separators = p_separators;
+	text.set_word_separators(custom_word_separators);
+	text.invalidate_all_lines();
+}
+
+bool TextEdit::is_custom_word_separators_enabled() const {
+	return use_custom_word_separators;
+}
+
+String TextEdit::get_custom_word_separators() const {
+	return custom_word_separators;
+}
+
+// Enable or disable custom word separators.
+void TextEdit::set_use_custom_word_separators(bool p_enabled) {
+	if (use_custom_word_separators == p_enabled) {
+		return;
+	}
+	use_custom_word_separators = p_enabled;
+	text.set_use_custom_word_separators(p_enabled);
+	text.invalidate_all_lines();
+}
+
+String TextEdit::get_default_word_separators() const {
+	return text.get_default_word_separators();
+}
+
 void TextEdit::set_draw_control_chars(bool p_enabled) {
 	if (draw_control_chars != p_enabled) {
 		draw_control_chars = p_enabled;
@@ -6716,6 +6812,12 @@ void TextEdit::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_highlight_all_occurrences", "enabled"), &TextEdit::set_highlight_all_occurrences);
 	ClassDB::bind_method(D_METHOD("is_highlight_all_occurrences_enabled"), &TextEdit::is_highlight_all_occurrences_enabled);
 
+	ClassDB::bind_method(D_METHOD("set_use_default_word_separators", "enabled"), &TextEdit::set_use_default_word_separators);
+	ClassDB::bind_method(D_METHOD("is_default_word_separators_enabled"), &TextEdit::is_default_word_separators_enabled);
+
+	ClassDB::bind_method(D_METHOD("set_use_custom_word_separators", "enabled"), &TextEdit::set_use_custom_word_separators);
+	ClassDB::bind_method(D_METHOD("is_custom_word_separators_enabled"), &TextEdit::is_custom_word_separators_enabled);
+
 	ClassDB::bind_method(D_METHOD("get_draw_control_chars"), &TextEdit::get_draw_control_chars);
 	ClassDB::bind_method(D_METHOD("set_draw_control_chars", "enabled"), &TextEdit::set_draw_control_chars);
 
@@ -6778,6 +6880,9 @@ void TextEdit::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "syntax_highlighter", PROPERTY_HINT_RESOURCE_TYPE, "SyntaxHighlighter", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_ALWAYS_DUPLICATE), "set_syntax_highlighter", "get_syntax_highlighter");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "highlight_all_occurrences"), "set_highlight_all_occurrences", "is_highlight_all_occurrences_enabled");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "highlight_current_line"), "set_highlight_current_line", "is_highlight_current_line_enabled");
+
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_default_word_separators"), "set_use_default_word_separators", "is_default_word_separators_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_custom_word_separators"), "set_use_custom_word_separators", "is_custom_word_separators_enabled");
 
 	ADD_GROUP("Visual Whitespace", "draw_");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "draw_control_chars"), "set_draw_control_chars", "get_draw_control_chars");
