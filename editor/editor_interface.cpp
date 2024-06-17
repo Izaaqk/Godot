@@ -41,6 +41,7 @@
 #include "editor/gui/editor_run_bar.h"
 #include "editor/gui/scene_tree_editor.h"
 #include "editor/inspector_dock.h"
+#include "editor/plugins/canvas_item_editor_plugin.h"
 #include "editor/plugins/node_3d_editor_plugin.h"
 #include "editor/property_selector.h"
 #include "editor/themes/editor_scale.h"
@@ -243,6 +244,14 @@ bool EditorInterface::is_multi_window_enabled() const {
 
 float EditorInterface::get_editor_scale() const {
 	return EDSCALE;
+}
+
+int EditorInterface::get_editor_tool_mode_2d() const {
+	return CanvasItemEditor::get_singleton()->get_current_tool();
+}
+
+int EditorInterface::get_editor_tool_mode_3d() const {
+	return Node3DEditor::get_singleton()->get_tool_mode();
 }
 
 void EditorInterface::popup_dialog(Window *p_dialog, const Rect2i &p_screen_rect) {
@@ -523,6 +532,8 @@ void EditorInterface::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_resource_previewer"), &EditorInterface::get_resource_previewer);
 	ClassDB::bind_method(D_METHOD("get_selection"), &EditorInterface::get_selection);
 	ClassDB::bind_method(D_METHOD("get_editor_settings"), &EditorInterface::get_editor_settings);
+	ClassDB::bind_method(D_METHOD("get_editor_tool_mode_2d"), &EditorInterface::get_editor_tool_mode_2d);
+	ClassDB::bind_method(D_METHOD("get_editor_tool_mode_3d"), &EditorInterface::get_editor_tool_mode_3d);
 
 	ClassDB::bind_method(D_METHOD("make_mesh_previews", "meshes", "preview_size"), &EditorInterface::_make_mesh_previews);
 
