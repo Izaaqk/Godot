@@ -255,4 +255,7 @@ Ref<Image> AtlasTexture::get_image() const {
 	return atlas_image->get_region(region);
 }
 
-AtlasTexture::AtlasTexture() {}
+AtlasTexture::AtlasTexture() {
+	region.size.x = 1;
+	region.size.y = 1;
+}
