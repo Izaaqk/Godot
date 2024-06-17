@@ -44,6 +44,7 @@
 #include "editor/editor_paths.h"
 #include "editor/editor_resource_preview.h"
 #include "editor/editor_settings.h"
+#include "editor/filesystem_dock.h"
 #include "scene/resources/packed_scene.h"
 
 EditorFileSystem *EditorFileSystem::singleton = nullptr;
@@ -1719,6 +1720,7 @@ void EditorFileSystem::update_file(const String &p_file) {
 
 void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 	bool updated = false;
+	bool clear_icon_cache = false;
 	for (const String &file : p_script_paths) {
 		ERR_CONTINUE(file.is_empty());
 		EditorFileSystemDirectory *fs = nullptr;
@@ -1741,6 +1743,9 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 				}
 				if (ClassDB::is_parent_class(fs->files[cpos]->type, SNAME("Script"))) {
 					_queue_update_script_class(file);
+					if (!fs->files[cpos]->script_class_icon_path.is_empty()) {
+						clear_icon_cache = true;
+					}
 				}
 				if (fs->files[cpos]->type == SNAME("PackedScene")) {
 					_queue_update_scene_groups(file);
@@ -1789,6 +1794,7 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 				_save_late_updated_files(); //files need to be updated in the re-scan
 			}
 
+			String old_script_class_icon_path = fs->files[cpos]->script_class_icon_path;
 			fs->files[cpos]->type = type;
 			fs->files[cpos]->resource_script_class = script_class;
 			fs->files[cpos]->uid = uid;
@@ -1816,6 +1822,9 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 			if (fs->files[cpos]->type == SNAME("PackedScene")) {
 				_queue_update_scene_groups(file);
 			}
+			if (fs->files[cpos]->type == SNAME("Resource") || old_script_class_icon_path != fs->files[cpos]->script_class_icon_path) {
+				clear_icon_cache = true;
+			}
 			updated = true;
 		}
 	}
@@ -1823,6 +1832,9 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 	if (updated) {
 		_update_pending_script_classes();
 		_update_pending_scene_groups();
+		if (clear_icon_cache) {
+			FileSystemDock::get_singleton()->clear_icon_cache();
+		}
 		call_deferred(SNAME("emit_signal"), "filesystem_changed"); //update later
 	}
 }

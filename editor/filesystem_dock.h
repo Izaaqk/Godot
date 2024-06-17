@@ -430,6 +430,8 @@ public:
 	void save_layout_to_config(Ref<ConfigFile> p_layout, const String &p_section) const;
 	void load_layout_from_config(Ref<ConfigFile> p_layout, const String &p_section);
 
+	void clear_icon_cache();
+
 	FileSystemDock();
 	~FileSystemDock();
 };
