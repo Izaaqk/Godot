@@ -41,8 +41,6 @@
 #include "core/templates/rid.h"
 #include "core/templates/safe_refcount.h"
 
-class CommandQueueMT;
-
 class WorkerThreadPool : public Object {
 	GDCLASS(WorkerThreadPool, Object)
 public:
@@ -163,7 +161,8 @@ private:
 
 	static WorkerThreadPool *singleton;
 
-	static thread_local CommandQueueMT *flushing_cmd_queue;
+	static const uint32_t MAX_UNLOCKABLE_MUTEXES = 2;
+	static thread_local BinaryMutex *unlockable_mutexes[MAX_UNLOCKABLE_MUTEXES];
 
 	TaskID _add_task(const Callable &p_callable, void (*p_func)(void *), void *p_userdata, BaseTemplateUserdata *p_template_userdata, bool p_high_priority, const String &p_description);
 	GroupID _add_group_task(const Callable &p_callable, void (*p_func)(void *, uint32_t), void *p_userdata, BaseTemplateUserdata *p_template_userdata, int p_elements, int p_tasks, bool p_high_priority, const String &p_description);
@@ -232,8 +231,8 @@ public:
 	static WorkerThreadPool *get_singleton() { return singleton; }
 	static int get_thread_index();
 
-	static void thread_enter_command_queue_mt_flush(CommandQueueMT *p_queue);
-	static void thread_exit_command_queue_mt_flush();
+	static uint32_t thread_enter_unlock_allowance_zone(BinaryMutex *p_mutex);
+	static void thread_exit_unlock_allowance_zone(uint32_t p_zone_id);
 
 	void init(int p_thread_count = -1, float p_low_priority_task_ratio = 0.3);
 	void finish();
