@@ -232,7 +232,14 @@ void AnimationPlayerEditor::_play_pressed() {
 			player->stop(); //so it won't blend with itself
 		}
 		ERR_FAIL_COND_EDMSG(!_validate_tracks(player->get_animation(current)), "Animation tracks may have any invalid key, abort playing.");
-		player->play(current);
+		Array markers = track_editor->get_selected_section();
+		if (markers.size() == 2) {
+			StringName start_marker = markers[0];
+			StringName end_marker = markers[1];
+			player->play_section_with_markers(current, start_marker, end_marker);
+		} else {
+			player->play(current);
+		}
 	}
 
 	//unstop
@@ -249,7 +256,14 @@ void AnimationPlayerEditor::_play_from_pressed() {
 		}
 		ERR_FAIL_COND_EDMSG(!_validate_tracks(player->get_animation(current)), "Animation tracks may have any invalid key, abort playing.");
 		player->seek(time, true, true);
-		player->play(current);
+		Array markers = track_editor->get_selected_section();
+		if (markers.size() == 2) {
+			StringName start_marker = markers[0];
+			StringName end_marker = markers[1];
+			player->play_section_with_markers(current, start_marker, end_marker);
+		} else {
+			player->play(current);
+		}
 	}
 
 	//unstop
@@ -270,7 +284,15 @@ void AnimationPlayerEditor::_play_bw_pressed() {
 			player->stop(); //so it won't blend with itself
 		}
 		ERR_FAIL_COND_EDMSG(!_validate_tracks(player->get_animation(current)), "Animation tracks may have any invalid key, abort playing.");
-		player->play_backwards(current);
+		Array markers = track_editor->get_selected_section();
+		if (markers.size() == 2) {
+			StringName start_marker = markers[0];
+			StringName end_marker = markers[1];
+
+			player->play_section_with_markers_backwards(current, start_marker, end_marker);
+		} else {
+			player->play_backwards(current);
+		}
 	}
 
 	//unstop
@@ -287,7 +309,14 @@ void AnimationPlayerEditor::_play_bw_from_pressed() {
 		}
 		ERR_FAIL_COND_EDMSG(!_validate_tracks(player->get_animation(current)), "Animation tracks may have any invalid key, abort playing.");
 		player->seek(time, true, true);
-		player->play_backwards(current);
+		Array markers = track_editor->get_selected_section();
+		if (markers.size() == 2) {
+			StringName start_marker = markers[0];
+			StringName end_marker = markers[1];
+			player->play_section_with_markers_backwards(current, start_marker, end_marker);
+		} else {
+			player->play_backwards(current);
+		}
 	}
 
 	//unstop
@@ -2319,4 +2348,25 @@ AnimationTrackKeyEditEditorPlugin::AnimationTrackKeyEditEditorPlugin() {
 
 bool AnimationTrackKeyEditEditorPlugin::handles(Object *p_object) const {
 	return p_object->is_class("AnimationTrackKeyEdit");
+}
+
+bool EditorInspectorPluginAnimationMarkerKeyEdit::can_handle(Object *p_object) {
+	return Object::cast_to<AnimationMarkerKeyEdit>(p_object) != nullptr;
+}
+
+void EditorInspectorPluginAnimationMarkerKeyEdit::parse_begin(Object *p_object) {
+	AnimationMarkerKeyEdit *amk = Object::cast_to<AnimationMarkerKeyEdit>(p_object);
+	ERR_FAIL_NULL(amk);
+
+	amk_editor = memnew(AnimationMarkerKeyEditEditor(amk->animation, amk->marker_name, amk->use_fps));
+	add_custom_control(amk_editor);
+}
+
+AnimationMarkerKeyEditEditorPlugin::AnimationMarkerKeyEditEditorPlugin() {
+	amk_plugin = memnew(EditorInspectorPluginAnimationMarkerKeyEdit);
+	EditorInspector::add_inspector_plugin(amk_plugin);
+}
+
+bool AnimationMarkerKeyEditEditorPlugin::handles(Object *p_object) const {
+	return p_object->is_class("AnimationMarkerKeyEdit");
 }
