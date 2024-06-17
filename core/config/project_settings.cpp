@@ -481,7 +481,7 @@ bool ProjectSettings::_load_resource_pack(const String &p_pack, bool p_replace_f
 
 	if (project_loaded) {
 		// This pack may have declared new global classes (make sure they are picked up).
-		refresh_global_class_list();
+		ScriptServer::load_global_class_list();
 
 		// This pack may have defined new UIDs, make sure they are cached.
 		ResourceUID::get_singleton()->load_from_cache(false);
@@ -1198,53 +1198,8 @@ Variant ProjectSettings::get_setting(const String &p_setting, const Variant &p_d
 	}
 }
 
-void ProjectSettings::refresh_global_class_list() {
-	// This is called after mounting a new PCK file to pick up class changes.
-	is_global_class_list_loaded = false; // Make sure we read from the freshly mounted PCK.
-	Array script_classes = get_global_class_list();
-	for (int i = 0; i < script_classes.size(); i++) {
-		Dictionary c = script_classes[i];
-		if (!c.has("class") || !c.has("language") || !c.has("path") || !c.has("base")) {
-			continue;
-		}
-		ScriptServer::add_global_class(c["class"], c["base"], c["language"], c["path"]);
-	}
-}
-
 TypedArray<Dictionary> ProjectSettings::get_global_class_list() {
-	if (is_global_class_list_loaded) {
-		return global_class_list;
-	}
-
-	Ref<ConfigFile> cf;
-	cf.instantiate();
-	if (cf->load(get_global_class_list_path()) == OK) {
-		global_class_list = cf->get_value("", "list", Array());
-	} else {
-#ifndef TOOLS_ENABLED
-		// Script classes can't be recreated in exported project, so print an error.
-		ERR_PRINT("Could not load global script cache.");
-#endif
-	}
-
-	// File read succeeded or failed. If it failed, assume everything is still okay.
-	// We will later receive updated class data in store_global_class_list().
-	is_global_class_list_loaded = true;
-
-	return global_class_list;
-}
-
-String ProjectSettings::get_global_class_list_path() const {
-	return get_project_data_path().path_join("global_script_class_cache.cfg");
-}
-
-void ProjectSettings::store_global_class_list(const Array &p_classes) {
-	Ref<ConfigFile> cf;
-	cf.instantiate();
-	cf->set_value("", "list", p_classes);
-	cf->save(get_global_class_list_path());
-
-	global_class_list = p_classes;
+	return ScriptServer::get_global_class_list_variant();
 }
 
 bool ProjectSettings::has_custom_feature(const String &p_feature) const {

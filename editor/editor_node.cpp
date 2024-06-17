@@ -950,7 +950,10 @@ void EditorNode::_fs_changed() {
 	// FIXME: Move this to a cleaner location, it's hacky to do this in _fs_changed.
 	String export_error;
 	Error err = OK;
-	if (!export_defer.preset.is_empty() && !EditorFileSystem::get_singleton()->is_scanning()) {
+	// Changed for is_ready because is_scanning returns false when the scan is done but
+	// scripts are not reloaded yet on the first load. is_ready returns true when everything
+	// is reimported and reloaded from the scan.
+	if (!export_defer.preset.is_empty() && EditorFileSystem::get_singleton()->is_ready()) {
 		String preset_name = export_defer.preset;
 		// Ensures export_project does not loop infinitely, because notifications may
 		// come during the export.

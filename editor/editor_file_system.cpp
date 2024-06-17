@@ -44,6 +44,7 @@
 #include "editor/editor_paths.h"
 #include "editor/editor_resource_preview.h"
 #include "editor/editor_settings.h"
+#include "editor/project_settings_editor.h"
 #include "scene/resources/packed_scene.h"
 
 EditorFileSystem *EditorFileSystem::singleton = nullptr;
@@ -563,6 +564,10 @@ bool EditorFileSystem::_scan_import_support(const Vector<String> &reimports) {
 bool EditorFileSystem::_update_scan_actions() {
 	sources_changed.clear();
 
+	// We need to update the script global class names before the reimports to be sure that
+	// all the importer classes that depends on class names will work.
+	_update_script_classes();
+
 	bool fs_changed = false;
 
 	Vector<String> reimports;
@@ -707,6 +712,10 @@ bool EditorFileSystem::_update_scan_actions() {
 		_save_filesystem_cache();
 	}
 
+	// Moving the processing of pending updates before the resources_reload event to be sure all global class names
+	// are updated. Script.cpp listens on resources_reload and reloads updated scripts.
+	_process_update_pending();
+
 	if (reloads.size()) {
 		emit_signal(SNAME("resources_reload"), reloads);
 	}
@@ -738,11 +747,11 @@ void EditorFileSystem::scan() {
 		new_filesystem = nullptr;
 		_update_scan_actions();
 		scanning = false;
-		_update_pending_script_classes();
-		_update_pending_scene_groups();
+		// Moving first_scan before the signals so the function is_ready could returns true
+		// in the editor_node to start the export if needed.
+		first_scan = false;
 		emit_signal(SNAME("filesystem_changed"));
 		emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-		first_scan = false;
 	} else {
 		ERR_FAIL_COND(thread.is_started());
 		set_process(true);
@@ -933,6 +942,21 @@ void EditorFileSystem::_scan_new_dir(EditorFileSystemDirectory *p_dir, Ref<DirAc
 				fi->script_class_name = fc->script_class_name;
 				fi->script_class_extends = fc->script_class_extends;
 				fi->script_class_icon_path = fc->script_class_icon_path;
+
+				if (first_scan && ClassDB::is_parent_class(fi->type, SNAME("Script"))) {
+					bool update_script = false;
+					String old_class_name = fi->script_class_name;
+					fi->script_class_name = _get_global_script_class(fi->type, path, &fi->script_class_extends, &fi->script_class_icon_path);
+					if (old_class_name != fi->script_class_name) {
+						update_script = true;
+					} else if (!fi->script_class_name.is_empty() && (!ScriptServer::is_global_class(fi->script_class_name) || ScriptServer::get_global_class_path(fi->script_class_name) != path)) {
+						// This script has a class name but is not in the global class names or the path of the class has changed.
+						update_script = true;
+					}
+					if (update_script) {
+						_queue_update_script_class(path);
+					}
+				}
 			} else {
 				//new or modified time
 				fi->type = ResourceLoader::get_resource_type(path);
@@ -1186,6 +1210,49 @@ void EditorFileSystem::_thread_func_sources(void *_userdata) {
 	efs->scanning_changes_done.set();
 }
 
+void EditorFileSystem::_remove_invalid_global_class_name() {
+	HashSet<String> existing_class_name;
+
+	_remove_invalid_global_class_name_internal(filesystem, &existing_class_name);
+
+	List<StringName> global_classes;
+	ScriptServer::get_global_class_list(&global_classes);
+	for (const StringName &class_name : global_classes) {
+		if (!existing_class_name.has(class_name)) {
+			ScriptServer::remove_global_class(class_name);
+		}
+	}
+}
+
+void EditorFileSystem::_remove_invalid_global_class_name_internal(EditorFileSystemDirectory *p_dir, HashSet<String> *p_existing_class_name) {
+	for (int i = 0; i < p_dir->files.size(); i++) {
+		const EditorFileSystemDirectory::FileInfo *fi = p_dir->files[i];
+		if (!fi->script_class_name.is_empty()) {
+			if (!p_existing_class_name->has(fi->script_class_name)) {
+				p_existing_class_name->insert(fi->script_class_name);
+			}
+		}
+	}
+	for (int i = 0; i < p_dir->subdirs.size(); i++) {
+		_remove_invalid_global_class_name_internal(p_dir->get_subdir(i), p_existing_class_name);
+	}
+}
+
+String EditorFileSystem::_get_file_by_class_name(EditorFileSystemDirectory *p_dir, const String &p_class_name) {
+	for (int i = 0; i < p_dir->files.size(); i++) {
+		EditorFileSystemDirectory::FileInfo *fi = p_dir->files[i];
+		if (fi->script_class_name == p_class_name) {
+			return p_dir->get_file_path(i);
+		}
+	}
+	for (int i = 0; i < p_dir->subdirs.size(); i++) {
+		String file = _get_file_by_class_name(p_dir->get_subdir(i), p_class_name);
+		if (!file.is_empty())
+			return file;
+	}
+	return "";
+}
+
 void EditorFileSystem::scan_changes() {
 	if (first_scan || // Prevent a premature changes scan from inhibiting the first full scan
 			scanning || scanning_changes || thread.is_started()) {
@@ -1209,8 +1276,6 @@ void EditorFileSystem::scan_changes() {
 			scan_total = 0;
 			_scan_fs_changes(filesystem, sp);
 			bool changed = _update_scan_actions();
-			_update_pending_script_classes();
-			_update_pending_scene_groups();
 			if (changed) {
 				emit_signal(SNAME("filesystem_changed"));
 			}
@@ -1276,13 +1341,13 @@ void EditorFileSystem::_notification(int p_what) {
 							thread_sources.wait_to_finish();
 						}
 						bool changed = _update_scan_actions();
-						_update_pending_script_classes();
-						_update_pending_scene_groups();
+						// Moving first_scan before the signals so the function is_ready could returns true
+						// in the editor_node to start the export if needed.
+						first_scan = false;
 						if (changed) {
 							emit_signal(SNAME("filesystem_changed"));
 						}
 						emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-						first_scan = false;
 						scanning_changes = false; // Changed to false here to prevent recursive triggering of scan thread.
 						done_importing = true;
 					}
@@ -1296,11 +1361,11 @@ void EditorFileSystem::_notification(int p_what) {
 					new_filesystem = nullptr;
 					thread.wait_to_finish();
 					_update_scan_actions();
-					_update_pending_script_classes();
-					_update_pending_scene_groups();
+					// Moving first_scan before the signals so the function is_ready could returns true
+					// in the editor_node to start the export if needed.
+					first_scan = false;
 					emit_signal(SNAME("filesystem_changed"));
 					emit_signal(SNAME("sources_changed"), sources_changed.size() > 0);
-					first_scan = false;
 				}
 
 				if (done_importing && scan_changes_pending) {
@@ -1316,6 +1381,12 @@ void EditorFileSystem::_notification(int p_what) {
 
 bool EditorFileSystem::is_scanning() const {
 	return scanning || scanning_changes;
+}
+
+bool EditorFileSystem::is_ready() const {
+	// This check is done for the editor_node when exporting via command line.
+	// It's important that everything is scanned and reimported.
+	return !scanning && !scanning_changes && !first_scan && !importing && !scan_changes_pending;
 }
 
 float EditorFileSystem::get_scanning_progress() const {
@@ -1579,14 +1650,38 @@ String EditorFileSystem::_get_global_script_class(const String &p_type, const St
 }
 
 void EditorFileSystem::_update_script_classes() {
+	if (update_script_paths.is_empty()) {
+		return;
+	}
+
 	update_script_mutex.lock();
 
 	for (const String &path : update_script_paths) {
 		EditorFileSystem::get_singleton()->register_global_class_script(path, path);
 	}
 
-	// Parse documentation second, as it requires the class names to be correct and registered
-	for (const String &path : update_script_paths) {
+	update_script_paths.clear();
+	update_script_mutex.unlock();
+
+	emit_signal("script_classes_updated");
+
+	// Rescan custom loaders and savers.
+	// Doing the following here because the `filesystem_changed` signal fires multiple times and isn't always followed by script classes update.
+	// So I thought it's better to do this when script classes really get updated
+	ResourceLoader::remove_custom_loaders();
+	ResourceLoader::add_custom_loaders();
+	ResourceSaver::remove_custom_savers();
+	ResourceSaver::add_custom_savers();
+}
+
+void EditorFileSystem::_update_script_documentation() {
+	if (update_script_paths_documentation.is_empty()) {
+		return;
+	}
+
+	update_script_mutex.lock();
+
+	for (const String &path : update_script_paths_documentation) {
 		int index = -1;
 		EditorFileSystemDirectory *efd = find_file(path, &index);
 
@@ -1610,36 +1705,24 @@ void EditorFileSystem::_update_script_classes() {
 		}
 	}
 
-	update_script_paths.clear();
+	update_script_paths_documentation.clear();
 	update_script_mutex.unlock();
-
-	ScriptServer::save_global_classes();
-	EditorNode::get_editor_data().script_class_save_icon_paths();
-	emit_signal("script_classes_updated");
-
-	// Rescan custom loaders and savers.
-	// Doing the following here because the `filesystem_changed` signal fires multiple times and isn't always followed by script classes update.
-	// So I thought it's better to do this when script classes really get updated
-	ResourceLoader::remove_custom_loaders();
-	ResourceLoader::add_custom_loaders();
-	ResourceSaver::remove_custom_savers();
-	ResourceSaver::add_custom_savers();
 }
 
-void EditorFileSystem::_update_pending_script_classes() {
-	if (!update_script_paths.is_empty()) {
-		_update_script_classes();
-	} else {
-		// In case the class cache file was removed somehow, regenerate it.
-		if (!FileAccess::exists(ScriptServer::get_global_class_cache_file_path())) {
-			ScriptServer::save_global_classes();
-		}
+void EditorFileSystem::_process_update_pending() {
+	_update_script_classes();
+	// Parse documentation second, as it requires the class names to be correct and registered
+	_update_script_documentation();
+	_update_pending_scene_groups();
+	if (first_scan) {
+		_remove_invalid_global_class_name();
 	}
 }
 
 void EditorFileSystem::_queue_update_script_class(const String &p_path) {
 	update_script_mutex.lock();
 	update_script_paths.insert(p_path);
+	update_script_paths_documentation.insert(p_path);
 	update_script_mutex.unlock();
 }
 
@@ -1789,6 +1872,7 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 				_save_late_updated_files(); //files need to be updated in the re-scan
 			}
 
+			String old_class_name = fs->files[cpos]->script_class_name;
 			fs->files[cpos]->type = type;
 			fs->files[cpos]->resource_script_class = script_class;
 			fs->files[cpos]->uid = uid;
@@ -1816,13 +1900,18 @@ void EditorFileSystem::update_files(const Vector<String> &p_script_paths) {
 			if (fs->files[cpos]->type == SNAME("PackedScene")) {
 				_queue_update_scene_groups(file);
 			}
+			if (!old_class_name.is_empty() && fs->files[cpos]->script_class_name != old_class_name && ClassDB::is_parent_class(type, SNAME("Script"))) {
+				String old_file = _get_file_by_class_name(filesystem, old_class_name);
+				if (!old_file.is_empty()) {
+					_queue_update_script_class(old_file);
+				}
+			}
 			updated = true;
 		}
 	}
 
 	if (updated) {
-		_update_pending_script_classes();
-		_update_pending_scene_groups();
+		_process_update_pending();
 		call_deferred(SNAME("emit_signal"), "filesystem_changed"); //update later
 	}
 }
@@ -1853,7 +1942,7 @@ void EditorFileSystem::register_global_class_script(const String &p_search_path,
 			return; // No lang found that can handle this global class
 		}
 
-		ScriptServer::add_global_class(efd->files[index]->script_class_name, efd->files[index]->script_class_extends, lang, p_target_path);
+		ScriptServer::add_global_class(efd->files[index]->script_class_name, efd->files[index]->script_class_extends, lang, p_target_path, efd->files[index]->script_class_icon_path);
 		EditorNode::get_editor_data().script_class_set_icon_path(efd->files[index]->script_class_name, efd->files[index]->script_class_icon_path);
 		EditorNode::get_editor_data().script_class_set_name(p_target_path, efd->files[index]->script_class_name);
 	}
@@ -2470,8 +2559,7 @@ void EditorFileSystem::reimport_files(const Vector<String> &p_files) {
 	ResourceUID::get_singleton()->update_cache(); // After reimporting, update the cache.
 
 	_save_filesystem_cache();
-	_update_pending_script_classes();
-	_update_pending_scene_groups();
+	_process_update_pending();
 	importing = false;
 	if (!is_scanning()) {
 		emit_signal(SNAME("filesystem_changed"));

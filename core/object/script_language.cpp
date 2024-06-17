@@ -33,6 +33,8 @@
 #include "core/config/project_settings.h"
 #include "core/debugger/engine_debugger.h"
 #include "core/debugger/script_debugger.h"
+#include "core/io/config_file.h"
+#include "core/io/dir_access.h"
 #include "core/io/resource_loader.h"
 
 #include <stdint.h>
@@ -44,6 +46,7 @@ Mutex ScriptServer::languages_mutex;
 
 bool ScriptServer::scripting_enabled = true;
 bool ScriptServer::reload_scripts_on_save = false;
+bool ScriptServer::_global_class_list_loading = false;
 ScriptEditRequestFunction ScriptServer::edit_request_func = nullptr;
 
 void Script::_notification(int p_what) {
@@ -250,33 +253,6 @@ Error ScriptServer::unregister_language(const ScriptLanguage *p_language) {
 }
 
 void ScriptServer::init_languages() {
-	{ // Load global classes.
-		global_classes_clear();
-#ifndef DISABLE_DEPRECATED
-		if (ProjectSettings::get_singleton()->has_setting("_global_script_classes")) {
-			Array script_classes = GLOBAL_GET("_global_script_classes");
-
-			for (const Variant &script_class : script_classes) {
-				Dictionary c = script_class;
-				if (!c.has("class") || !c.has("language") || !c.has("path") || !c.has("base")) {
-					continue;
-				}
-				add_global_class(c["class"], c["base"], c["language"], c["path"]);
-			}
-			ProjectSettings::get_singleton()->clear("_global_script_classes");
-		}
-#endif
-
-		Array script_classes = ProjectSettings::get_singleton()->get_global_class_list();
-		for (const Variant &script_class : script_classes) {
-			Dictionary c = script_class;
-			if (!c.has("class") || !c.has("language") || !c.has("path") || !c.has("base")) {
-				continue;
-			}
-			add_global_class(c["class"], c["base"], c["language"], c["path"]);
-		}
-	}
-
 	HashSet<ScriptLanguage *> langs_to_init;
 	{
 		MutexLock lock(languages_mutex);
@@ -291,10 +267,159 @@ void ScriptServer::init_languages() {
 		E->init();
 	}
 
+	// Loads the global class lists from scripts in the project, moved after the languages inits
+	// the be sure C# is initialized.
+	load_global_class_list();
+
 	{
 		MutexLock lock(languages_mutex);
 		languages_ready = true;
 	}
+}
+
+void ScriptServer::load_global_class_list() {
+	// Load global classes.
+	global_classes_clear();
+
+	// In the Editor, the global classes are always loaded from the scripts on disk to prevent
+	// synchronization problems with the cache in global_script_class_cache.cfg
+	// but it could be potentially slow with a lot of scripts.
+	// When not running in the editor, the cache should be used for performance.
+	bool load_from_cache = true;
+#ifdef TOOLS_ENABLED
+	// Needs to check is_editor_hint and is_project_loaded the regenerate the cache from disk
+	// in the editor, while exportating but not when --generate-mono-glue.
+	if (Engine::get_singleton()->is_editor_hint() && ProjectSettings::get_singleton()->is_project_loaded()) {
+		load_from_cache = false;
+	}
+#endif
+
+	_global_class_list_loading = true;
+
+	if (load_from_cache) {
+		_load_global_class_list_from_cache();
+	} else {
+#ifndef DISABLE_DEPRECATED
+		if (ProjectSettings::get_singleton()->has_setting("_global_script_classes")) {
+			Array script_classes = GLOBAL_GET("_global_script_classes");
+
+			for (const Variant &script_class : script_classes) {
+				Dictionary c = script_class;
+				if (!c.has("class") || !c.has("language") || !c.has("path") || !c.has("base")) {
+					continue;
+				}
+				add_global_class(c["class"], c["base"], c["language"], c["path"], "");
+			}
+			ProjectSettings::get_singleton()->clear("_global_script_classes");
+		}
+#endif
+
+		Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_RESOURCES);
+		da->change_dir("res://");
+		_load_global_class_list_from_scripts("res://", da);
+
+		//Saving the cache...
+		_save_global_class_list_to_cache();
+	}
+
+	_global_class_list_loading = false;
+}
+
+void ScriptServer::_load_global_class_list_from_scripts(const String &p_path, Ref<DirAccess> &da) {
+	List<String> dirs;
+
+	da->list_dir_begin();
+	while (true) {
+		String path = da->get_next();
+		if (path.is_empty()) {
+			break;
+		}
+
+		if (da->current_is_hidden()) {
+			continue;
+		}
+
+		if (da->current_is_dir()) {
+			if (path.begins_with(".")) { // Ignore special and . / ..
+				continue;
+			}
+			dirs.push_back(path);
+		} else {
+			String type = ResourceLoader::get_resource_type(path);
+			if (!type.is_empty()) {
+				for (int i = 0; i < ScriptServer::get_language_count(); i++) {
+					if (ScriptServer::get_language(i)->handles_global_class_type(type)) {
+						String global_name;
+						String extends;
+						String icon_path;
+						String class_name;
+						String class_path = p_path.path_join(path);
+
+						class_name = ScriptServer::get_language(i)->get_global_class_name(class_path, &extends, &icon_path);
+
+						if (!class_name.is_empty() && !extends.is_empty()) {
+							add_global_class(class_name, extends, ScriptServer::get_language(i)->get_name(), class_path, icon_path);
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	da->list_dir_end();
+
+	for (List<String>::Element *E = dirs.front(); E; E = E->next()) {
+		String new_path = p_path.path_join(E->get());
+		if (da->change_dir(new_path) == OK) {
+			// Ignore scripts in directories with a .gdignore file.
+			if (da->file_exists(".gdignore")) {
+				continue;
+			}
+
+			// Skip if another project inside this.
+			if (da->file_exists("project.godot")) {
+				continue;
+			}
+
+			_load_global_class_list_from_scripts(new_path, da);
+		}
+	}
+}
+
+void ScriptServer::_load_global_class_list_from_cache() {
+	Ref<ConfigFile> cf;
+	cf.instantiate();
+	if (cf->load(get_global_class_list_path()) == OK) {
+		Array global_class_list = cf->get_value("", "list", Array());
+		for (int i = 0; i < global_class_list.size(); i++) {
+			Dictionary c = global_class_list[i];
+			if (!c.has("class") || !c.has("language") || !c.has("path") || !c.has("base")) {
+				continue;
+			}
+			String icon_path = "";
+			if (c.has("icon")) {
+				icon_path = c["icon"];
+			}
+			ScriptServer::add_global_class(c["class"], c["base"], c["language"], c["path"], icon_path);
+		}
+	} else {
+#ifndef TOOLS_ENABLED
+		// Script classes can't be recreated in exported project, so print an error.
+		ERR_PRINT("Could not load global script cache.");
+#endif
+	}
+}
+
+void ScriptServer::_save_global_class_list_to_cache() {
+	Ref<ConfigFile> cf;
+	cf.instantiate();
+	cf->set_value("", "list", get_global_class_list_variant());
+	cf->save(get_global_class_list_path());
+}
+
+String ScriptServer::get_global_class_list_path() {
+	return ProjectSettings::get_singleton()->get_project_data_path().path_join("global_script_class_cache.cfg");
 }
 
 void ScriptServer::finish_languages() {
@@ -363,16 +488,19 @@ void ScriptServer::global_classes_clear() {
 	inheriters_cache.clear();
 }
 
-void ScriptServer::add_global_class(const StringName &p_class, const StringName &p_base, const StringName &p_language, const String &p_path) {
+void ScriptServer::add_global_class(const StringName &p_class, const StringName &p_base, const StringName &p_language, const String &p_path, const String &p_icon_path) {
 	ERR_FAIL_COND_MSG(p_class == p_base || (global_classes.has(p_base) && get_global_class_native_base(p_base) == p_class), "Cyclic inheritance in script class.");
 	GlobalScriptClass *existing = global_classes.getptr(p_class);
+
+	bool updated = false;
 	if (existing) {
 		// Update an existing class (only set dirty if something changed).
-		if (existing->base != p_base || existing->path != p_path || existing->language != p_language) {
+		if (existing->base != p_base || existing->path != p_path || existing->language != p_language || existing->icon_path != p_icon_path) {
 			existing->base = p_base;
 			existing->path = p_path;
 			existing->language = p_language;
-			inheriters_cache_dirty = true;
+			existing->icon_path = p_icon_path;
+			updated = true;
 		}
 	} else {
 		// Add new class.
@@ -380,14 +508,26 @@ void ScriptServer::add_global_class(const StringName &p_class, const StringName 
 		g.language = p_language;
 		g.path = p_path;
 		g.base = p_base;
+		g.icon_path = p_icon_path;
 		global_classes[p_class] = g;
+		updated = true;
+	}
+
+	if (updated) {
 		inheriters_cache_dirty = true;
+		if (!_global_class_list_loading) {
+			_save_global_class_list_to_cache();
+		}
 	}
 }
 
 void ScriptServer::remove_global_class(const StringName &p_class) {
 	global_classes.erase(p_class);
 	inheriters_cache_dirty = true;
+
+	if (!_global_class_list_loading) {
+		_save_global_class_list_to_cache();
+	}
 }
 
 void ScriptServer::get_inheriters_list(const StringName &p_base_type, List<StringName> *r_classes) {
@@ -420,6 +560,11 @@ void ScriptServer::remove_global_class_by_path(const String &p_path) {
 		if (kv.value.path == p_path) {
 			global_classes.erase(kv.key);
 			inheriters_cache_dirty = true;
+
+			if (!_global_class_list_loading) {
+				_save_global_class_list_to_cache();
+			}
+
 			return;
 		}
 	}
@@ -464,35 +609,18 @@ void ScriptServer::get_global_class_list(List<StringName> *r_global_classes) {
 	}
 }
 
-void ScriptServer::save_global_classes() {
-	Dictionary class_icons;
-
-	Array script_classes = ProjectSettings::get_singleton()->get_global_class_list();
-	for (const Variant &script_class : script_classes) {
-		Dictionary d = script_class;
-		if (!d.has("name") || !d.has("icon")) {
-			continue;
-		}
-		class_icons[d["name"]] = d["icon"];
+TypedArray<Dictionary> ScriptServer::get_global_class_list_variant() {
+	TypedArray<Dictionary> list;
+	for (const KeyValue<StringName, GlobalScriptClass> &E : global_classes) {
+		Dictionary dict;
+		dict["class"] = E.key;
+		dict["base"] = E.value.base;
+		dict["language"] = E.value.language;
+		dict["path"] = E.value.path;
+		dict["icon"] = E.value.icon_path;
+		list.push_back(dict);
 	}
-
-	List<StringName> gc;
-	get_global_class_list(&gc);
-	Array gcarr;
-	for (const StringName &E : gc) {
-		Dictionary d;
-		d["class"] = E;
-		d["language"] = global_classes[E].language;
-		d["path"] = global_classes[E].path;
-		d["base"] = global_classes[E].base;
-		d["icon"] = class_icons.get(E, "");
-		gcarr.push_back(d);
-	}
-	ProjectSettings::get_singleton()->store_global_class_list(gcarr);
-}
-
-String ScriptServer::get_global_class_cache_file_path() {
-	return ProjectSettings::get_singleton()->get_global_class_list_path();
+	return list;
 }
 
 ////////////////////

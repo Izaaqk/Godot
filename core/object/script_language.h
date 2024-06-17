@@ -32,6 +32,7 @@
 #define SCRIPT_LANGUAGE_H
 
 #include "core/doc_data.h"
+#include "core/io/dir_access.h"
 #include "core/io/resource.h"
 #include "core/object/script_instance.h"
 #include "core/templates/pair.h"
@@ -57,16 +58,22 @@ class ScriptServer {
 
 	static bool scripting_enabled;
 	static bool reload_scripts_on_save;
+	static bool _global_class_list_loading;
 
 	struct GlobalScriptClass {
 		StringName language;
 		String path;
 		StringName base;
+		String icon_path;
 	};
 
 	static HashMap<StringName, GlobalScriptClass> global_classes;
 	static HashMap<StringName, Vector<StringName>> inheriters_cache;
 	static bool inheriters_cache_dirty;
+
+	static void _load_global_class_list_from_scripts(const String &p_path, Ref<DirAccess> &dir);
+	static void _load_global_class_list_from_cache();
+	static void _save_global_class_list_to_cache();
 
 public:
 	static ScriptEditRequestFunction edit_request_func;
@@ -86,7 +93,7 @@ public:
 	static void thread_exit();
 
 	static void global_classes_clear();
-	static void add_global_class(const StringName &p_class, const StringName &p_base, const StringName &p_language, const String &p_path);
+	static void add_global_class(const StringName &p_class, const StringName &p_base, const StringName &p_language, const String &p_path, const String &p_icon_path);
 	static void remove_global_class(const StringName &p_class);
 	static void remove_global_class_by_path(const String &p_path);
 	static bool is_global_class(const StringName &p_class);
@@ -95,9 +102,11 @@ public:
 	static StringName get_global_class_base(const String &p_class);
 	static StringName get_global_class_native_base(const String &p_class);
 	static void get_global_class_list(List<StringName> *r_global_classes);
+	static TypedArray<Dictionary> get_global_class_list_variant();
+	static void load_global_class_list();
+	static String get_global_class_list_path();
+
 	static void get_inheriters_list(const StringName &p_base_type, List<StringName> *r_classes);
-	static void save_global_classes();
-	static String get_global_class_cache_file_path();
 
 	static void init_languages();
 	static void finish_languages();
