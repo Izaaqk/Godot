@@ -144,6 +144,8 @@ public:
 	StringName id_pressed;
 
 	StringName panel;
+
+	StringName confirmed;
 };
 
 #define SceneStringName(m_name) SceneStringNames::get_singleton()->m_name
