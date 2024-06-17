@@ -118,6 +118,9 @@ void TileMapLayer::_debug_update(bool p_force_cleanup) {
 				rs->canvas_item_clear(ci);
 			} else {
 				ci = rs->canvas_item_create();
+				if (!is_physics_interpolated_and_enabled()) {
+					rs->canvas_item_set_interpolated(ci, false);
+				}
 				rs->canvas_item_set_z_index(ci, RS::CANVAS_ITEM_Z_MAX - 1);
 				rs->canvas_item_set_parent(ci, get_canvas_item());
 			}
@@ -301,6 +304,9 @@ void TileMapLayer::_rendering_update(bool p_force_cleanup) {
 					if (prev_ci == RID() || prev_material != mat || prev_z_index != tile_z_index) {
 						// If so, create a new CanvasItem.
 						ci = rs->canvas_item_create();
+						if (!is_physics_interpolated_and_enabled()) {
+							rs->canvas_item_set_interpolated(ci, false);
+						}
 						if (mat.is_valid()) {
 							rs->canvas_item_set_material(ci, mat->get_rid());
 						}
@@ -446,12 +452,13 @@ void TileMapLayer::_rendering_notification(int p_what) {
 			}
 		}
 	} else if (p_what == NOTIFICATION_RESET_PHYSICS_INTERPOLATION) {
-		for (const KeyValue<Vector2i, Ref<RenderingQuadrant>> &kv : rendering_quadrant_map) {
-			for (const RID &ci : kv.value->canvas_items) {
-				if (ci.is_null()) {
-					continue;
+		if (is_physics_interpolated_and_enabled() && is_visible_in_tree()) {
+			for (const KeyValue<Vector2i, Ref<RenderingQuadrant>> &kv : rendering_quadrant_map) {
+				for (const RID &ci : kv.value->canvas_items) {
+					if (ci.is_valid()) {
+						rs->canvas_item_reset_physics_interpolation(ci);
+					}
 				}
-				rs->canvas_item_reset_physics_interpolation(ci);
 			}
 		}
 	}
@@ -598,6 +605,9 @@ void TileMapLayer::_rendering_occluders_update_cell(CellData &r_cell_data) {
 						xform.set_origin(tile_set->map_to_local(r_cell_data.coords));
 						if (!occluder.is_valid()) {
 							occluder = rs->canvas_light_occluder_create();
+							if (!is_physics_interpolated_and_enabled()) {
+								rs->canvas_light_occluder_set_interpolated(occluder, false);
+							}
 						}
 						rs->canvas_light_occluder_set_transform(occluder, get_global_transform() * xform);
 						rs->canvas_light_occluder_set_polygon(occluder, tile_data->get_occluder(occlusion_layer_index, flip_h, flip_v, transpose)->get_rid());
