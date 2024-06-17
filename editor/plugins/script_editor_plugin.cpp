@@ -2856,6 +2856,8 @@ void ScriptEditor::_add_callback(Object *p_obj, const String &p_function, const 
 
 		break;
 	}
+
+	EditorNode::get_singleton()->previous_item();
 }
 
 void ScriptEditor::_save_editor_state(ScriptEditorBase *p_editor) {
